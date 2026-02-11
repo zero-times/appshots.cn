@@ -6,7 +6,7 @@
     "dev:client": "pnpm --filter @appshots/shared build && pnpm --filter @appshots/client dev",
     "dev:server": "pnpm --filter @appshots/shared build && pnpm --filter @appshots/server dev",
     "build": "pnpm -r run build",
-    "typecheck": "pnpm -r run typecheck",
+    "typecheck": "pnpm --filter @appshots/shared build && pnpm -r run typecheck",
     "skill:export": "pnpm --filter @appshots/server exec tsx ../scripts/skill-export.ts",
     "test:skill-cli": "node ./scripts/test-skill-export-smoke.mjs"
   },

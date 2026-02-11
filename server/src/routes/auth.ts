@@ -5,6 +5,7 @@ import { eq, and, isNull, gt, desc } from 'drizzle-orm';
 import { db, schema } from '../db/connection.js';
 import { getSessionId } from '../middleware/session.js';
 import { getUserId, setAuthCookie, clearAuthCookie, createAuthToken } from '../middleware/auth.js';
+import { sendVerificationCode, isMailConfigured } from '../services/mail.js';
 import type { SendCodeRequest, VerifyCodeRequest, SendCodeResponse, AuthResponse, MeResponse } from '@appshots/shared';
 
 const router: Router = Router();
@@ -57,10 +58,18 @@ router.post('/send-code', async (req, res, next) => {
       createdAt: now,
     });
 
-    console.log(`[Auth] Verification code for ${normalizedEmail}: ${code}`);
+    // Send email (or log in dev mode)
+    const mailSent = await sendVerificationCode(normalizedEmail, code);
+
+    if (!mailSent && process.env.NODE_ENV === 'production') {
+      res.status(500).json({ message: '邮件发送失败，请稍后再试' });
+      return;
+    }
+
+    console.log(`[Auth] Verification code for ${normalizedEmail}: ${code}${mailSent ? ' (email sent)' : ' (no SMTP, dev only)'}`);
 
     const response: SendCodeResponse = {
-      message: '验证码已发送',
+      message: mailSent ? '验证码已发送到你的邮箱' : '验证码已生成',
       ...(process.env.NODE_ENV !== 'production' && { devCode: code }),
     };
 

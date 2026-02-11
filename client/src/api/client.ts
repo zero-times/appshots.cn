@@ -1,4 +1,11 @@
-import type { SendCodeResponse, AuthResponse, MeResponse, LogoutResponse } from '@appshots/shared';
+import type {
+  AnalyzeProjectRequest,
+  AnalyzeResponse,
+  AuthResponse,
+  LogoutResponse,
+  MeResponse,
+  SendCodeResponse,
+} from '@appshots/shared';
 
 const API_BASE = '/api';
 
@@ -59,8 +66,11 @@ export const api = {
     return res.json();
   },
 
-  analyzeProject: (projectId: string) =>
-    request<Record<string, unknown>>(`/projects/${projectId}/analyze`, { method: 'POST' }),
+  analyzeProject: (projectId: string, payload?: AnalyzeProjectRequest) =>
+    request<AnalyzeResponse>(`/projects/${projectId}/analyze`, {
+      method: 'POST',
+      body: JSON.stringify(payload ?? {}),
+    }),
 
   updateProject: (projectId: string, data: Record<string, unknown>) =>
     request<Record<string, unknown>>(`/projects/${projectId}`, {

@@ -1,10 +1,12 @@
 import { Router } from 'express';
+import fs from 'fs';
 import { nanoid } from 'nanoid';
 import { and, desc, eq, or } from 'drizzle-orm';
 import { db, schema } from '../db/connection.js';
 import { uploadScreenshots } from '../middleware/upload.js';
 import { getSessionId } from '../middleware/session.js';
 import { getUserId } from '../middleware/auth.js';
+import { sanitizeScreenshotBuffer } from '../services/screenshotSanitizer.js';
 import type { CreateProjectRequest, UpdateProjectRequest } from '@appshots/shared';
 
 const router: Router = Router();
@@ -161,6 +163,14 @@ router.post('/:id/upload', (req, res, next) => {
         res.status(400).json({ message: 'Upload 3-5 screenshots' });
         return;
       }
+
+      await Promise.all(
+        files.map(async (file) => {
+          const original = await fs.promises.readFile(file.path);
+          const sanitized = await sanitizeScreenshotBuffer(original);
+          await fs.promises.writeFile(file.path, sanitized);
+        }),
+      );
 
       const paths = files.map((file) => file.filename);
       await db

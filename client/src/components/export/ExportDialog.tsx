@@ -1,10 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   DEVICE_SIZES,
-  DEFAULT_EXPORT_LANGUAGES,
   dedupeLanguageCodes,
   getLanguageLabel,
-  normalizeLanguageCode,
 } from '@appshots/shared';
 import type { DeviceSizeId } from '@appshots/shared';
 
@@ -17,6 +15,7 @@ interface ExportDialogProps {
   screenshotCount: number;
   canExportProject: boolean;
   projectStatusLabel: string;
+  availableLanguages: string[];
 }
 
 export function ExportDialog({
@@ -28,10 +27,11 @@ export function ExportDialog({
   screenshotCount,
   canExportProject,
   projectStatusLabel,
+  availableLanguages,
 }: ExportDialogProps) {
   const [deviceSizes, setDeviceSizes] = useState<DeviceSizeId[]>(['6.7']);
-  const [selectedLanguages, setSelectedLanguages] = useState<string[]>([...DEFAULT_EXPORT_LANGUAGES]);
-  const [customLanguage, setCustomLanguage] = useState('');
+  const languageOptions = useMemo(() => dedupeLanguageCodes(availableLanguages, ['zh', 'en']), [availableLanguages]);
+  const [selectedLanguages, setSelectedLanguages] = useState<string[]>(() => [...languageOptions]);
   const deviceSelectionEmpty = deviceSizes.length === 0;
   const hasScreenshots = screenshotCount > 0;
   const estimatedOutput = hasScreenshots ? deviceSizes.length * selectedLanguages.length * screenshotCount : 0;
@@ -42,18 +42,16 @@ export function ExportDialog({
     setDeviceSizes((prev) => (prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]));
   };
 
-  const toggleLanguage = (code: string) => {
-    const normalized = normalizeLanguageCode(code);
-    setSelectedLanguages((prev) =>
-      prev.includes(normalized) ? prev.filter((item) => item !== normalized) : dedupeLanguageCodes([...prev, normalized]),
-    );
-  };
+  useEffect(() => {
+    setSelectedLanguages((prev) => {
+      const retained = prev.filter((code) => languageOptions.includes(code));
+      if (retained.length > 0) return retained;
+      return [...languageOptions];
+    });
+  }, [languageOptions]);
 
-  const addCustomLanguage = () => {
-    const normalized = normalizeLanguageCode(customLanguage);
-    if (!normalized) return;
-    setSelectedLanguages((prev) => dedupeLanguageCodes([...prev, normalized]));
-    setCustomLanguage('');
+  const toggleLanguage = (code: string) => {
+    setSelectedLanguages((prev) => (prev.includes(code) ? prev.filter((item) => item !== code) : [...prev, code]));
   };
 
   return (
@@ -90,9 +88,9 @@ export function ExportDialog({
 
       <div>
         <h3 className="text-sm font-semibold text-slate-200">导出语言</h3>
-        <p className="mt-1 text-xs text-slate-400">默认提供中/英/葡萄牙语/日语/韩语，可按语言代码扩展。</p>
+        <p className="mt-1 text-xs text-slate-400">仅支持当前项目已生成的语言，可按需勾选/取消。</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          {dedupeLanguageCodes([...DEFAULT_EXPORT_LANGUAGES, ...selectedLanguages]).map((code) => (
+          {languageOptions.map((code) => (
             <button
               key={code}
               onClick={() => toggleLanguage(code)}
@@ -105,17 +103,6 @@ export function ExportDialog({
               {getLanguageLabel(code)}
             </button>
           ))}
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input
-            value={customLanguage}
-            onChange={(event) => setCustomLanguage(event.target.value)}
-            placeholder="添加语言代码，例如：es / fr / de"
-            className="sf-input max-w-[280px]"
-          />
-          <button type="button" onClick={addCustomLanguage} className="sf-btn-ghost px-3 py-1.5 text-xs">
-            添加语言
-          </button>
         </div>
         {languageSelectionEmpty && <p className="mt-2 text-xs text-amber-200">请至少选择一种语言用于导出。</p>}
       </div>

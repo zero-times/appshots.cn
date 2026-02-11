@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { DEFAULT_EXPORT_LANGUAGES, dedupeLanguageCodes } from '@appshots/shared';
 import { useProjectStore } from '../stores/projectStore';
 import { api } from '../api/client';
 import { StepIndicator } from '../components/wizard/StepIndicator';
@@ -25,6 +26,7 @@ export default function Creator() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [appName, setAppName] = useState('');
   const [appDescription, setAppDescription] = useState('');
+  const [supportedLanguages, setSupportedLanguages] = useState<string[]>([...DEFAULT_EXPORT_LANGUAGES]);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -44,8 +46,13 @@ export default function Creator() {
     if (isAnalyzing) return;
     const name = nextName.trim();
     const description = nextDescription.trim();
+    const languages = dedupeLanguageCodes(supportedLanguages, DEFAULT_EXPORT_LANGUAGES);
     if (!name) {
       setAnalysisError('请填写应用名称后再开始分析。');
+      return;
+    }
+    if (languages.length === 0) {
+      setAnalysisError('请至少选择一种支持语言后再开始分析。');
       return;
     }
     if (uploadedFiles.length < 3) {
@@ -68,7 +75,7 @@ export default function Creator() {
       }
 
       await api.uploadScreenshots(id, uploadedFiles);
-      await api.analyzeProject(id);
+      await api.analyzeProject(id, { languages });
 
       const fullProject = await api.getProject(id);
       if (mountedRef.current) {
@@ -118,18 +125,23 @@ export default function Creator() {
         {wizardStep === 'info' && (
           <div>
             <h2 className="sf-display text-xl font-semibold text-white">填写 App 信息</h2>
-            <p className="mt-1 text-sm text-slate-400">让 AI 更准确理解你的产品定位。</p>
+            <p className="mt-1 text-sm text-slate-400">让 AI 更准确理解你的产品定位，并一次返回多语言文案。</p>
 
             <div className="mt-6">
               <AppInfoForm
                 appName={appName}
                 appDescription={appDescription}
+                supportedLanguages={supportedLanguages}
                 onNameChange={(value) => {
                   setAppName(value);
                   if (analysisError) setAnalysisError(null);
                 }}
                 onDescriptionChange={(value) => {
                   setAppDescription(value);
+                  if (analysisError) setAnalysisError(null);
+                }}
+                onSupportedLanguagesChange={(value) => {
+                  setSupportedLanguages(dedupeLanguageCodes(value, DEFAULT_EXPORT_LANGUAGES));
                   if (analysisError) setAnalysisError(null);
                 }}
                 onSubmit={() => handleAnalyze()}

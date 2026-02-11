@@ -28,7 +28,7 @@ const STEPS = [
 const STATS = [
   { label: '生成时间', value: '10-20 秒', tone: 'text-emerald-100 bg-emerald-500/15 ring-emerald-300/40' },
   { label: '模板风格', value: '14+', tone: 'text-primary-100 bg-primary-500/15 ring-primary-300/40' },
-  { label: '支持尺寸', value: 'iPhone / iPad', tone: 'text-slate-100 bg-white/10 ring-white/15' },
+  { label: '支持尺寸', value: 'iPhone / iPad / Google Play', tone: 'text-slate-100 bg-white/10 ring-white/15' },
 ] as const;
 
 export default function Landing() {

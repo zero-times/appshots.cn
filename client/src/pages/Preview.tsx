@@ -7,7 +7,7 @@ import { CopyEditor } from '../components/editor/CopyEditor';
 import { TemplatePicker } from '../components/template/TemplatePicker';
 import { ExportDialog } from '../components/export/ExportDialog';
 import { useAuthStore } from '../stores/authStore';
-import { DEFAULT_EXPORT_LANGUAGES, DEVICE_SIZES, TEMPLATES, dedupeLanguageCodes, getLanguageLabel } from '@appshots/shared';
+import { DEVICE_SIZES, TEMPLATES, dedupeLanguageCodes, getLanguageLabel } from '@appshots/shared';
 import type { CompositionModeId, DeviceSizeId, GeneratedCopy, TemplateStyleId } from '@appshots/shared';
 
 export default function Preview() {
@@ -69,6 +69,25 @@ export default function Preview() {
       fn();
     }
   }, []);
+
+  const previewLanguages = dedupeLanguageCodes(
+    [
+      ...(currentProject?.generatedCopy?.headlines ?? []).flatMap((item) =>
+        Object.keys(item).filter((key) => key !== 'screenshotIndex'),
+      ),
+      ...(currentProject?.generatedCopy?.subtitles ?? []).flatMap((item) =>
+        Object.keys(item).filter((key) => key !== 'screenshotIndex'),
+      ),
+      ...Object.keys(currentProject?.generatedCopy?.tagline ?? {}),
+    ],
+    ['zh', 'en'],
+  );
+
+  useEffect(() => {
+    if (!previewLanguages.includes(lang)) {
+      setLang(previewLanguages[0] ?? 'zh');
+    }
+  }, [lang, previewLanguages]);
 
   useEffect(() => {
     if (!id) {
@@ -465,22 +484,6 @@ export default function Preview() {
     if (!completionSummary) return '等待生成文案';
     return `已完成 ${completionSummary.completed} / ${screenshotCount}`;
   })();
-  const previewLanguages = dedupeLanguageCodes([
-    ...DEFAULT_EXPORT_LANGUAGES,
-    ...(currentProject.generatedCopy?.headlines ?? []).flatMap((item) =>
-      Object.keys(item).filter((key) => key !== 'screenshotIndex'),
-    ),
-    ...(currentProject.generatedCopy?.subtitles ?? []).flatMap((item) =>
-      Object.keys(item).filter((key) => key !== 'screenshotIndex'),
-    ),
-  ]);
-
-  useEffect(() => {
-    if (!previewLanguages.includes(lang)) {
-      setLang(previewLanguages[0] ?? 'zh');
-    }
-  }, [lang, previewLanguages]);
-
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 shadow-[0_20px_50px_rgba(6,7,12,0.45)] backdrop-blur">
@@ -522,6 +525,7 @@ export default function Preview() {
           screenshotCount={screenshotCount}
           canExportProject={canExportProject}
           projectStatusLabel={statusLabel}
+          availableLanguages={previewLanguages}
         />
       ) : (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">

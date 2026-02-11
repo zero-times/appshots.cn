@@ -7,9 +7,14 @@ export interface CreateProjectRequest {
   appDescription?: string;
 }
 
+export interface AnalyzeProjectRequest {
+  languages?: string[];
+}
+
 export interface AnalyzeResponse {
   analysis: AIAnalysis;
   generatedCopy: GeneratedCopy;
+  languages?: string[];
   recommendedTemplate: TemplateStyleId;
   recommendedCompositionMode?: AIAnalysis['recommendedCompositionMode'];
   recommendedTemplateCombo?: TemplateComboItem[];

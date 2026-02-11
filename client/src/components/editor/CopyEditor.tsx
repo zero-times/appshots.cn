@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  DEFAULT_EXPORT_LANGUAGES,
   dedupeLanguageCodes,
   getLanguageLabel,
   normalizeLanguageCode,
@@ -19,13 +18,12 @@ const WORD_BASED_LANGS = new Set(['en', 'pt', 'es', 'fr', 'de', 'it', 'id']);
 
 export function CopyEditor({ copy, screenshotCount, currentIndex, onIndexChange, onCopyChange }: CopyEditorProps) {
   const [lang, setLang] = useState<string>('zh');
-  const [customLanguage, setCustomLanguage] = useState('');
   const hasScreenshots = screenshotCount > 0;
   const headlines = copy.headlines ?? [];
   const subtitles = copy.subtitles ?? [];
 
   const availableLanguages = useMemo(() => {
-    const collected: string[] = [...DEFAULT_EXPORT_LANGUAGES];
+    const collected: string[] = [...Object.keys(copy.tagline || {})];
     for (const item of [...headlines, ...subtitles]) {
       Object.keys(item).forEach((key) => {
         if (key !== 'screenshotIndex') {
@@ -33,8 +31,8 @@ export function CopyEditor({ copy, screenshotCount, currentIndex, onIndexChange,
         }
       });
     }
-    return dedupeLanguageCodes(collected);
-  }, [headlines, subtitles]);
+    return dedupeLanguageCodes(collected, ['zh', 'en']);
+  }, [copy.tagline, headlines, subtitles]);
 
   useEffect(() => {
     if (!availableLanguages.includes(lang)) {
@@ -122,38 +120,6 @@ export function CopyEditor({ copy, screenshotCount, currentIndex, onIndexChange,
     onCopyChange({ ...copy, subtitles: nextSubtitles });
   };
 
-  const addLanguage = () => {
-    const nextCode = normalizeLanguageCode(customLanguage);
-    if (!nextCode) return;
-    if (availableLanguages.includes(nextCode)) {
-      setLang(nextCode);
-      setCustomLanguage('');
-      return;
-    }
-
-    const nextHeadlines = Array.from({ length: Math.max(headlines.length, screenshotCount) }, (_, index) => {
-      const existing = headlines.find((item) => item.screenshotIndex === index) ?? headlines[index] ?? { screenshotIndex: index };
-      return { ...existing, screenshotIndex: index, [nextCode]: typeof existing[nextCode] === 'string' ? existing[nextCode] : '' };
-    });
-
-    const nextSubtitles = Array.from({ length: Math.max(subtitles.length, screenshotCount) }, (_, index) => {
-      const existing = subtitles.find((item) => item.screenshotIndex === index) ?? subtitles[index] ?? { screenshotIndex: index };
-      return { ...existing, screenshotIndex: index, [nextCode]: typeof existing[nextCode] === 'string' ? existing[nextCode] : '' };
-    });
-
-    const nextTagline = { ...(copy.tagline || {}), [nextCode]: copy.tagline?.[nextCode] ?? '' };
-
-    onCopyChange({
-      ...copy,
-      headlines: nextHeadlines,
-      subtitles: nextSubtitles,
-      tagline: nextTagline,
-    });
-
-    setLang(nextCode);
-    setCustomLanguage('');
-  };
-
   const headline = getEntryValue(headlines, safeIndex, lang);
   const subtitle = getEntryValue(subtitles, safeIndex, lang);
   const headlineMeta = getLengthMeta(headline, 'headline');
@@ -210,18 +176,6 @@ export function CopyEditor({ copy, screenshotCount, currentIndex, onIndexChange,
             ))}
           </div>
         </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          value={customLanguage}
-          onChange={(event) => setCustomLanguage(event.target.value)}
-          placeholder="添加语言代码，例如：es / fr / de"
-          className="sf-input max-w-[260px]"
-        />
-        <button type="button" onClick={addLanguage} className="sf-btn-ghost px-3 py-1.5 text-xs">
-          添加语言
-        </button>
       </div>
 
       <p className="text-xs text-slate-400">更改会自动同步到项目，可随时在右侧预览。</p>

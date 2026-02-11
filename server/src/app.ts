@@ -17,7 +17,20 @@ const app: express.Express = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDistDir = path.resolve(__dirname, '../../client/dist');
 
-app.use(helmet({ crossOriginResourcePolicy: false }));
+app.use(
+  helmet({
+    crossOriginResourcePolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        connectSrc: ["'self'"],
+      },
+    },
+  }),
+);
 app.use(cors({ origin: ['http://localhost:5173', 'http://127.0.0.1:5173'] }));
 app.use(express.json());
 app.use(sessionMiddleware);

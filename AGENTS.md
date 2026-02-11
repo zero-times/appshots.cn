@@ -40,9 +40,10 @@ appshots 是一个用于生成 App Store 截图素材的全栈 Monorepo：
 核心业务链路：
 1. 创建项目
 2. 上传 3-5 张截图
-3. AI 分析并生成文案/推荐模板
-4. 预览编辑（文案 + 模板）
-5. 导出（带/不带水印，支持任务进度）
+3. 填写应用信息（含支持语言）
+4. AI 分析并按所选语言生成文案/推荐模板
+5. 预览编辑（文案 + 模板）
+6. 导出（带/不带水印，支持任务进度）
 
 ---
 
@@ -159,8 +160,8 @@ appshots/
 - `GET /api/projects/:id` 项目详情（按 scope 校验）
 - `PATCH /api/projects/:id` 更新项目（文案/模板等）
 - `DELETE /api/projects/:id` 删除项目
-- `POST /api/projects/:id/upload` 上传截图（3-5 张，<=10MB/张）
-- `POST /api/projects/:id/analyze` AI 分析与文案生成
+- `POST /api/projects/:id/upload` 上传截图（3-5 张，<=10MB/张；服务端会自动裁掉顶部状态栏与底部黑条）
+- `POST /api/projects/:id/analyze` AI 分析与文案生成（可传 `languages`，一次返回多语言文案）
 
 ### Export
 - `GET /api/projects/:id/preview/:index` 渲染单张预览图

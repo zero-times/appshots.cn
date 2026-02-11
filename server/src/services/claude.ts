@@ -1,5 +1,5 @@
 import { env } from '../config/env.js';
-import { DEFAULT_EXPORT_LANGUAGES, TEMPLATES, dedupeLanguageCodes } from '@appshots/shared';
+import { DEFAULT_EXPORT_LANGUAGES, DEFAULT_LANGUAGE_LABELS, TEMPLATES, dedupeLanguageCodes } from '@appshots/shared';
 import type {
   AIAnalysis,
   CopyVariant,
@@ -259,18 +259,50 @@ function normalizeCopyVariant(
     }
   }
 
+  const fallbackText = pickFallbackText(base, languages);
   languages.forEach((code) => {
-    if (typeof base[code] !== 'string') {
-      base[code] = '';
-    }
+    const value = base[code];
+    if (typeof value === 'string' && value.trim().length > 0) return;
+    base[code] = fallbackText;
   });
 
   return base;
 }
 
-function normalizeGeneratedCopy(raw: unknown, screenshotCount: number): GeneratedCopy {
+function pickFallbackText(source: Record<string, string | number>, languages: readonly string[]): string {
+  const priority = dedupeLanguageCodes(['en', 'zh', ...languages], languages);
+  for (const code of priority) {
+    const value = source[code];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  for (const [key, value] of Object.entries(source)) {
+    if (key === 'screenshotIndex') continue;
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return '';
+}
+
+function normalizeTagline(rawTagline: Record<string, unknown>, languages: readonly string[]): Record<string, string> {
+  const tagLineFallback = pickFallbackText(rawTagline as Record<string, string | number>, languages);
+  const tagline: Record<string, string> = {};
+
+  languages.forEach((code) => {
+    const value = rawTagline[code];
+    tagline[code] = typeof value === 'string' && value.trim().length > 0 ? value.trim() : tagLineFallback;
+  });
+
+  return tagline;
+}
+
+function normalizeGeneratedCopy(raw: unknown, screenshotCount: number, languages: readonly string[]): GeneratedCopy {
   const source = (raw && typeof raw === 'object' ? raw : {}) as Partial<GeneratedCopy> & Record<string, unknown>;
-  const languages = dedupeLanguageCodes(DEFAULT_EXPORT_LANGUAGES);
+  const targetLanguages = dedupeLanguageCodes(languages, DEFAULT_EXPORT_LANGUAGES);
   const headlineSource = Array.isArray(source.headlines) ? source.headlines : [];
   const subtitleSource = Array.isArray(source.subtitles) ? source.subtitles : [];
 
@@ -279,7 +311,7 @@ function normalizeGeneratedCopy(raw: unknown, screenshotCount: number): Generate
       if (!item || typeof item !== 'object') return false;
       return (item as { screenshotIndex?: unknown }).screenshotIndex === index;
     });
-    return normalizeCopyVariant(matched ?? headlineSource[index], index, languages);
+    return normalizeCopyVariant(matched ?? headlineSource[index], index, targetLanguages);
   });
 
   const subtitles = Array.from({ length: screenshotCount }, (_, index) => {
@@ -287,16 +319,29 @@ function normalizeGeneratedCopy(raw: unknown, screenshotCount: number): Generate
       if (!item || typeof item !== 'object') return false;
       return (item as { screenshotIndex?: unknown }).screenshotIndex === index;
     });
-    return normalizeCopyVariant(matched ?? subtitleSource[index], index, languages);
+    return normalizeCopyVariant(matched ?? subtitleSource[index], index, targetLanguages);
   });
 
   const rawTagline = source.tagline && typeof source.tagline === 'object' ? (source.tagline as Record<string, unknown>) : {};
-  const tagline: Record<string, string> = {};
-  languages.forEach((code) => {
-    tagline[code] = typeof rawTagline[code] === 'string' ? (rawTagline[code] as string) : '';
-  });
+  const tagline = normalizeTagline(rawTagline, targetLanguages);
 
   return { headlines, subtitles, tagline };
+}
+
+function buildLanguagePrompt(languages: readonly string[]): string {
+  return languages
+    .map((code) => `- "${code}" (${DEFAULT_LANGUAGE_LABELS[code] ?? code.toUpperCase()})`)
+    .join('\n');
+}
+
+function buildLanguageObjectExample(languages: readonly string[], zhText: string, enText: string): string {
+  return languages
+    .map((code) => {
+      if (code === 'zh') return `"zh": "${zhText}"`;
+      if (code === 'en') return `"en": "${enText}"`;
+      return `"${code}": "${enText} (${code})"`;
+    })
+    .join(', ');
 }
 
 export async function analyzeScreenshots(
@@ -381,15 +426,23 @@ export async function generateCopy(
   appName: string,
   screenshotCount: number,
   appDescription?: string,
+  languages: readonly string[] = DEFAULT_EXPORT_LANGUAGES,
 ): Promise<GeneratedCopy> {
+  const requestedLanguages = dedupeLanguageCodes(languages, DEFAULT_EXPORT_LANGUAGES);
+  const languageCatalog = buildLanguagePrompt(requestedLanguages);
+  const headlineExample = buildLanguageObjectExample(requestedLanguages, '中文标题', 'English headline');
+  const subtitleExample = buildLanguageObjectExample(requestedLanguages, '中文副标题', 'English subtitle');
+  const taglineExample = buildLanguageObjectExample(requestedLanguages, '应用标语', 'App tagline');
+
   const text = await createChatCompletion(
     [
       {
         role: 'system',
         content: `You are a professional App Store marketing copywriter.
 Write compelling, concise copy for App Store and Google Play screenshots.
-Always provide both Chinese (zh) and English (en) versions.
-Chinese copy should feel natural and idiomatic, not a direct translation.`,
+Always provide every requested language key.
+Chinese copy should feel natural and idiomatic, not a direct translation.
+Keep all language variants aligned in meaning, tone, and structure.`,
       },
       {
         role: 'user',
@@ -398,23 +451,27 @@ ${appDescription ? `Description: ${appDescription}` : ''}
 App Type: ${analysis.appType}
 Key Features: ${analysis.keyFeatures.join(', ')}
 Number of screenshots: ${screenshotCount}
+Requested languages:
+${languageCatalog}
 
 Generate marketing copy for app store screenshots. Return JSON:
 {
   "headlines": [
-    { "screenshotIndex": 0, "zh": "中文标题", "en": "English headline" },
+    { "screenshotIndex": 0, ${headlineExample} },
     ...one per screenshot
   ],
   "subtitles": [
-    { "screenshotIndex": 0, "zh": "中文副标题", "en": "English subtitle" },
+    { "screenshotIndex": 0, ${subtitleExample} },
     ...one per screenshot
   ],
-  "tagline": { "zh": "应用标语", "en": "App tagline" }
+  "tagline": { ${taglineExample} }
 }
 
 Headlines: 2-6 words, impactful, action-oriented.
 Subtitles: 5-12 words, explain the benefit.
 Make each screenshot's copy highlight a different feature.
+Each headline/subtitle object MUST contain every requested language key.
+tagline MUST contain every requested language key.
 Return ONLY the JSON object.`,
       },
     ],
@@ -431,5 +488,5 @@ Return ONLY the JSON object.`,
     throw new Error('Failed to parse copy generation JSON');
   }
 
-  return normalizeGeneratedCopy(raw, screenshotCount);
+  return normalizeGeneratedCopy(raw, screenshotCount, requestedLanguages);
 }

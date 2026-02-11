@@ -4,6 +4,8 @@ import { db, schema } from '../db/connection.js';
 import { analyzeScreenshots, generateCopy } from '../services/claude.js';
 import { getSessionId } from '../middleware/session.js';
 import { getUserId } from '../middleware/auth.js';
+import { DEFAULT_EXPORT_LANGUAGES, dedupeLanguageCodes } from '@appshots/shared';
+import type { AnalyzeProjectRequest } from '@appshots/shared';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -26,6 +28,8 @@ router.post('/:id/analyze', async (req, res, next) => {
   const userId = getUserId(req);
 
   try {
+    const body = (req.body ?? {}) as AnalyzeProjectRequest;
+    const requestedLanguages = dedupeLanguageCodes(body.languages, DEFAULT_EXPORT_LANGUAGES);
     const scope = projectScope(req.params.id, sessionId, userId);
     const [project] = await db.select().from(schema.projects).where(scope);
     if (!project) {
@@ -49,7 +53,13 @@ router.post('/:id/analyze', async (req, res, next) => {
     const analysis = await analyzeScreenshots(buffers, project.appName, project.appDescription || undefined);
 
     // Step 2: Copy generation
-    const copy = await generateCopy(analysis, project.appName, screenshotPaths.length, project.appDescription || undefined);
+    const copy = await generateCopy(
+      analysis,
+      project.appName,
+      screenshotPaths.length,
+      project.appDescription || undefined,
+      requestedLanguages,
+    );
 
     // Save results
     await db
@@ -66,6 +76,7 @@ router.post('/:id/analyze', async (req, res, next) => {
     res.json({
       analysis,
       generatedCopy: copy,
+      languages: requestedLanguages,
       recommendedTemplate: analysis.recommendedTemplate,
       recommendedCompositionMode: analysis.recommendedCompositionMode,
       recommendedTemplateCombo: analysis.recommendedTemplateCombo,
