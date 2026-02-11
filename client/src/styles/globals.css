@@ -1,0 +1,69 @@
+/* Google Fonts below are open-source and free for commercial use (SIL Open Font License). */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+SC:wght@500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --sf-body-font: 'Noto Sans', 'Noto Sans SC', 'Noto Sans JP', 'Noto Sans KR', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --sf-heading-font: 'Noto Serif SC', 'Noto Sans SC', 'Songti SC', serif;
+}
+
+body {
+  @apply min-h-screen text-slate-100 antialiased;
+  font-family: var(--sf-body-font);
+  background-color: #0b0c12;
+  background-image: radial-gradient(circle at top left, rgba(255, 146, 72, 0.16), transparent 42%),
+    radial-gradient(circle at 70% 10%, rgba(86, 204, 242, 0.12), transparent 40%),
+    radial-gradient(circle at 30% 70%, rgba(99, 102, 241, 0.12), transparent 45%),
+    linear-gradient(180deg, rgba(11, 12, 18, 0.9) 0%, rgba(6, 7, 12, 0.98) 100%);
+  background-attachment: fixed;
+}
+
+#root {
+  @apply min-h-screen;
+}
+
+@layer components {
+  .sf-display {
+    font-family: var(--sf-heading-font);
+    letter-spacing: -0.01em;
+  }
+
+  .sf-card {
+    @apply rounded-2xl border border-white/10 bg-slate-950/70 backdrop-blur shadow-[0_18px_60px_rgba(6,7,12,0.55)];
+    background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0)),
+      radial-gradient(circle at top right, rgba(255, 146, 72, 0.12), transparent 45%);
+  }
+
+  .sf-card-soft {
+    @apply rounded-xl border border-white/10 bg-white/5 backdrop-blur shadow-[0_12px_30px_rgba(5,6,10,0.5)];
+    background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0));
+  }
+
+  .sf-label {
+    @apply block text-xs font-semibold uppercase tracking-[0.18em] text-slate-300 mb-1;
+  }
+
+  .sf-input {
+    @apply w-full rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-500/25;
+  }
+
+  .sf-select {
+    @apply rounded-xl border border-white/15 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-500/25;
+  }
+
+  .sf-btn-primary {
+    @apply inline-flex items-center justify-center rounded-xl border border-primary-300/40 bg-gradient-to-r from-primary-500 via-primary-400 to-accent-500 px-5 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(255,122,24,0.35)] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .sf-btn-ghost {
+    @apply inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:-translate-y-0.5 hover:border-white/30 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .sf-badge {
+    @apply inline-flex items-center rounded-full border border-primary-300/40 bg-primary-500/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary-100;
+  }
+}

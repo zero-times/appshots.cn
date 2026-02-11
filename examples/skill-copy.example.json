@@ -1,0 +1,15 @@
+{
+  "headlines": [
+    { "screenshotIndex": 0, "zh": "高效管理任务", "en": "Manage tasks faster", "pt": "Gerencie tarefas rapidamente" },
+    { "screenshotIndex": 1, "zh": "多端同步", "en": "Sync across devices", "pt": "Sincronize em todos os dispositivos" }
+  ],
+  "subtitles": [
+    { "screenshotIndex": 0, "zh": "一屏查看今日重点，轻松安排工作", "en": "See today's priorities in one screen", "pt": "Veja prioridades do dia em uma tela" },
+    { "screenshotIndex": 1, "zh": "手机、平板、桌面实时同步更新", "en": "Realtime sync on phone, tablet, and desktop", "pt": "Sincronização em tempo real em todos os dispositivos" }
+  ],
+  "tagline": {
+    "zh": "让效率可视化",
+    "en": "Visualize your productivity",
+    "pt": "Visualize sua produtividade"
+  }
+}

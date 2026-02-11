@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+.git
+.gitignore
+pnpm-debug.log
+npm-debug.log
+.DS_Store
+uploads
+data
+client/dist
+server/dist
+packages/shared/dist
