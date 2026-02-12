@@ -1,9 +1,10 @@
 import { Router } from 'express';
-import { and, eq, or } from 'drizzle-orm';
+import { nanoid } from 'nanoid';
+import { and, eq, gt, or } from 'drizzle-orm';
 import { db, schema } from '../db/connection.js';
 import { analyzeScreenshots, generateCopy } from '../services/claude.js';
 import { getSessionId } from '../middleware/session.js';
-import { getUserId } from '../middleware/auth.js';
+import { getUserId, requireAuth, getIsMember } from '../middleware/auth.js';
 import { DEFAULT_EXPORT_LANGUAGES, dedupeLanguageCodes } from '@appshots/shared';
 import type { AnalyzeProjectRequest } from '@appshots/shared';
 import path from 'path';
@@ -22,15 +23,55 @@ function projectScope(projectId: string, sessionId: string, userId?: string) {
   return and(eq(schema.projects.id, projectId), ownerCondition);
 }
 
-// Trigger AI analysis
-router.post('/:id/analyze', async (req, res, next) => {
+function getRouteParam(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0] ?? '';
+  return value ?? '';
+}
+
+// Trigger AI analysis (login required)
+router.post('/:id/analyze', requireAuth, async (req, res, next) => {
   const sessionId = getSessionId(req);
-  const userId = getUserId(req);
+  const userId = getUserId(req)!;
+  const isMember = getIsMember(req);
+  const projectId = getRouteParam(req.params.id);
 
   try {
-    const body = (req.body ?? {}) as AnalyzeProjectRequest;
-    const requestedLanguages = dedupeLanguageCodes(body.languages, DEFAULT_EXPORT_LANGUAGES);
-    const scope = projectScope(req.params.id, sessionId, userId);
+    // Rate limit: free users get 1 analysis per day
+    if (!isMember) {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const [todayUsage] = await db
+        .select()
+        .from(schema.analysisUsage)
+        .where(
+          and(
+            eq(schema.analysisUsage.userId, userId),
+            gt(schema.analysisUsage.usedAt, startOfDay),
+          ),
+        )
+        .limit(1);
+
+      if (todayUsage) {
+        const nextDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+        res.status(429).json({
+          message: '免费用户每天只能使用 1 次 AI 分析，升级会员可解锁无限次数',
+          nextAvailableAt: nextDay.toISOString(),
+        });
+        return;
+      }
+    }
+
+    // Determine languages based on membership
+    let requestedLanguages: string[];
+    if (!isMember) {
+      requestedLanguages = ['zh']; // free users: single language only
+    } else {
+      const body = (req.body ?? {}) as AnalyzeProjectRequest;
+      requestedLanguages = dedupeLanguageCodes(body.languages, DEFAULT_EXPORT_LANGUAGES);
+    }
+
+    const scope = projectScope(projectId, sessionId, userId);
     const [project] = await db.select().from(schema.projects).where(scope);
     if (!project) {
       res.status(404).json({ message: 'Project not found' });
@@ -73,6 +114,16 @@ router.post('/:id/analyze', async (req, res, next) => {
       })
       .where(scope);
 
+    // Record usage for free users (persistent rate limiting)
+    if (!isMember) {
+      await db.insert(schema.analysisUsage).values({
+        id: nanoid(),
+        userId,
+        usedAt: new Date(),
+        projectId,
+      });
+    }
+
     res.json({
       analysis,
       generatedCopy: copy,
@@ -80,13 +131,14 @@ router.post('/:id/analyze', async (req, res, next) => {
       recommendedTemplate: analysis.recommendedTemplate,
       recommendedCompositionMode: analysis.recommendedCompositionMode,
       recommendedTemplateCombo: analysis.recommendedTemplateCombo,
+      isMember,
     });
   } catch (err) {
     // Reset status on error
     await db
       .update(schema.projects)
       .set({ status: 'draft', updatedAt: new Date() })
-      .where(projectScope(req.params.id, sessionId, userId));
+      .where(projectScope(projectId, sessionId, userId));
     next(err);
   }
 });

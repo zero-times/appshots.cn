@@ -126,23 +126,40 @@ appshots/
 
 ### 6.1 项目中心展示规则
 - `GET /api/projects` **仅返回登录用户自己的项目**（按 `ownerUserId`）
-- 未登录访问项目中心接口时返回空列表
+- 项目能力改为登录前置：未登录访问项目接口返回 401
 - 前端 `/history` 未登录时展示登录引导，而不是显示项目
 
-### 6.2 删除项目
+### 6.2 功能使用登录要求
+- 创建/查看/更新/删除项目、上传截图、AI 分析、预览渲染、导出任务均要求登录
+- 前端未登录时应展示登录引导，不应继续核心流程
+
+### 6.3 删除项目
 - 支持删除项目（`DELETE /api/projects/:id`）
 - 前端必须二次确认（确认框）再执行删除
 
-### 6.3 高级导出权限
-- 高级导出（无水印，`includeWatermark=false`）仅登录用户可用
-- 前端按钮未登录时禁用并提示
-- 后端必须二次兜底（未登录直接 401）
+### 6.4 会员与免费权限边界
+- 免费用户：
+  - 每天仅允许 1 次 AI 分析
+  - AI 分析语言固定为 `zh`
+  - 导出仅允许单语言 + 带水印
+  - 不可使用预览编辑（文案/模板更新）
+- 会员用户：
+  - AI 分析不限次数，支持多语言
+  - 可使用预览编辑能力
+  - 支持无水印导出与多语言导出
+- 会员开通方式：前端固定提示「微信手动开通」
 
-### 6.4 高级导出频率限制
+### 6.5 高级导出频率限制
+- 仅会员高级导出（无水印）受该规则约束
 - 高级导出 5 分钟内只能触发一次
 - 限流键：`projectId + userId`（或匿名 session）
 - 触发频率过高返回 429
 - **注意**：限流当前为内存级，服务重启后会重置
+
+### 6.6 管理后台可见性
+- 管理后台入口仅对 `role=admin` 用户显示
+- 非管理员访问 `/admin` 仅展示无权限提示
+- 管理后台支持：用户角色管理、会员开通/撤销、项目与用户删除
 
 ---
 
@@ -152,27 +169,31 @@ appshots/
 - `POST /api/auth/send-code` 发送验证码（每邮箱 1 分钟限 1 次）
 - `POST /api/auth/verify-code` 验证登录/注册 + 迁移匿名项目
 - `GET /api/auth/me` 当前登录态
+- `GET /api/auth/usage` 获取当日 AI 分析使用量
 - `POST /api/auth/logout` 退出
 
 ### Projects
-- `GET /api/projects` 项目列表（仅登录用户）
-- `POST /api/projects` 创建项目
-- `GET /api/projects/:id` 项目详情（按 scope 校验）
-- `PATCH /api/projects/:id` 更新项目（文案/模板等）
-- `DELETE /api/projects/:id` 删除项目
-- `POST /api/projects/:id/upload` 上传截图（3-5 张，<=10MB/张；服务端会自动裁掉顶部状态栏与底部黑条）
-- `POST /api/projects/:id/analyze` AI 分析与文案生成（可传 `languages`，一次返回多语言文案）
+- `GET /api/projects` 项目列表（登录必需）
+- `POST /api/projects` 创建项目（登录必需）
+- `GET /api/projects/:id` 项目详情（登录 + scope 校验）
+- `PATCH /api/projects/:id` 更新项目（会员可编辑文案/模板）
+- `DELETE /api/projects/:id` 删除项目（登录必需）
+- `POST /api/projects/:id/upload` 上传截图（登录必需；3-5 张，<=10MB/张；服务端自动裁掉顶部状态栏与底部黑条）
+- `POST /api/projects/:id/analyze` AI 分析与文案生成（登录必需；免费用户每天 1 次且仅中文）
 
 ### Export
-- `GET /api/projects/:id/preview/:index` 渲染单张预览图
-- `POST /api/projects/:id/export/jobs` 创建导出任务（推荐）
+- `GET /api/projects/:id/preview/:index` 渲染单张预览图（登录必需）
+- `POST /api/projects/:id/export/jobs` 创建导出任务（推荐；登录必需）
 - `GET /api/export/jobs/:jobId` 查询任务
 - `GET /api/export/jobs/:jobId/stream` SSE 进度
-- `POST /api/projects/:id/export` 旧版导出接口（兼容）
+- `POST /api/projects/:id/export` 旧版导出接口（兼容；登录必需）
 - `GET /api/export/:filename` 下载 ZIP
 
-### Admin（受 `ADMIN_KEY` 保护）
+### Admin（管理员可用，支持 `ADMIN_KEY` 兜底）
 - `GET /api/admin/users` 查看用户与其项目
+- `GET /api/admin/members` 查看当前生效会员
+- `PATCH /api/admin/users/:userId/role` 设置用户角色（`user` / `admin`）
+- `POST /api/admin/users/:userId/membership` 开通/撤销会员
 - `DELETE /api/admin/projects/:projectId` 删除指定项目
 - `DELETE /api/admin/users/:userId` 删除用户并级联删除其项目
 
@@ -240,12 +261,16 @@ appshots/
 - [ ] 无明显 TS 类型断言滥用（`as any` / `as never`）新增
 
 ### 手工冒烟
-- [ ] 匿名创建项目、上传、分析、预览正常
+- [ ] 未登录访问创建/项目详情/导出时会被引导登录
 - [ ] 登录后可在项目中心看到本人项目
 - [ ] 项目中心删除前有确认框，删除后列表刷新
-- [ ] 未登录无法点击高级导出，且后端返回 401
+- [ ] 免费用户每日仅 1 次分析，第二次触发返回 429
+- [ ] 免费用户分析后默认进入导出交付，不可编辑模板/文案
+- [ ] 免费用户仅支持单语言导出（带水印）
+- [ ] 会员可编辑模板/文案并支持多语言分析与导出
 - [ ] 高级导出 5 分钟内重复触发返回 429
-- [ ] 免费导出（带水印）可正常使用
+- [ ] 非管理员看不到管理后台入口且无法访问管理数据
+- [ ] 管理员可设置角色、开通/撤销会员、删除用户/项目
 
 ---
 
@@ -260,8 +285,11 @@ appshots/
 
 ## 14) 常见问题排查
 
-- `401 请先登录后再使用高级导出`：检查登录态与 cookie 是否携带
+- `401 请先登录`：检查登录态与 cookie 是否携带
+- `403 编辑模板和文案仅限会员使用`：确认当前账号会员状态
+- `403 无水印导出仅限会员使用`：确认会员状态或改用免费导出
 - `429 高级导出调用过于频繁`：等待 5 分钟后重试
+- `429 免费用户每天只能使用 1 次 AI 分析`：次日重试或开通会员
 - `Project not found`：检查 session/user 是否与项目归属一致
 - `OPENAI_API_KEY is not configured`：检查根目录 `.env`
 - 分析失败返回 `draft`：查看服务端日志与 LLM 响应解析

@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom';
+import { MembershipWechatCard } from '../components/common/MembershipWechatCard';
+import { membershipWechatLabel } from '../constants/membership';
 
 const FEATURES = [
   {
@@ -176,14 +178,18 @@ export default function Landing() {
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Ready to forge</p>
           <h2 className="sf-display mt-2 text-2xl font-semibold text-white">开始下一次上架素材迭代</h2>
           <p className="mt-2 text-sm text-slate-300">从截图上传到导出成品，最快 3 分钟完成一轮。</p>
+          <p className="mt-2 text-xs text-slate-500">会员功能（多语言、无水印、编辑增强）请联系 {membershipWechatLabel()} 手动开通。</p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Link to="/create" className="sf-btn-primary">
-            创建新项目
-          </Link>
-          <Link to="/history" className="sf-btn-ghost">
-            查看项目中心
-          </Link>
+        <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-3">
+            <Link to="/create" className="sf-btn-primary">
+              创建新项目
+            </Link>
+            <Link to="/history" className="sf-btn-ghost">
+              查看项目中心
+            </Link>
+          </div>
+          <MembershipWechatCard compact />
         </div>
       </section>
     </div>

@@ -32,9 +32,17 @@ export function initDatabase() {
   db.run(sql`CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     email TEXT NOT NULL UNIQUE,
+    role TEXT NOT NULL DEFAULT 'user',
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   )`);
+
+  // Migrate: add role column to users if missing
+  const userColumns = db.all<{ name: string }>(sql`PRAGMA table_info(users)`);
+  const hasRole = userColumns.some((column) => column.name === 'role');
+  if (!hasRole) {
+    db.run(sql`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'`);
+  }
 
   db.run(sql`CREATE TABLE IF NOT EXISTS verification_codes (
     id TEXT PRIMARY KEY,
@@ -44,6 +52,27 @@ export function initDatabase() {
     used_at INTEGER,
     attempts INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL
+  )`);
+
+  // Memberships table
+  db.run(sql`CREATE TABLE IF NOT EXISTS memberships (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    activated_at INTEGER NOT NULL,
+    expires_at INTEGER,
+    activated_by TEXT,
+    note TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`);
+
+  // Analysis usage tracking (persistent daily rate limiting)
+  db.run(sql`CREATE TABLE IF NOT EXISTS analysis_usage (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    used_at INTEGER NOT NULL,
+    project_id TEXT NOT NULL
   )`);
 
   console.log('[DB] Database initialized');

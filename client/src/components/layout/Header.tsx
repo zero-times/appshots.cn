@@ -1,15 +1,19 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { to: '/create', label: '开始制作' },
   { to: '/history', label: '项目中心' },
-  { to: '/admin', label: '管理后台' },
 ] as const;
 
 export function Header() {
   const location = useLocation();
-  const { user, status, logout } = useAuthStore();
+  const { user, membership, status, logout } = useAuthStore();
+  const isAdmin = user?.role === 'admin';
+  const navItems = isAdmin
+    ? [...BASE_NAV_ITEMS, { to: '/admin', label: '管理后台' as const }]
+    : BASE_NAV_ITEMS;
+  const isMember = membership?.status === 'active';
 
   return (
     <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/70 backdrop-blur-xl shadow-[0_6px_30px_rgba(4,6,12,0.5)]">
@@ -26,7 +30,7 @@ export function Header() {
 
         <div className="flex items-center gap-2">
           <nav className="flex items-center gap-2">
-            {NAV_ITEMS.map((item) => {
+            {navItems.map((item) => {
               const active = location.pathname.startsWith(item.to);
               return (
                 <Link
@@ -50,7 +54,25 @@ export function Header() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-500/20 text-sm font-bold text-primary-200 ring-1 ring-primary-400/40">
                   {user.email[0].toUpperCase()}
                 </div>
-                <span className="hidden text-sm text-slate-300 sm:inline">{user.email}</span>
+                <div className="hidden min-w-0 sm:block">
+                  <p className="truncate text-sm text-slate-300">{user.email}</p>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] uppercase tracking-[0.16em]">
+                    <span
+                      className={`rounded-full px-2 py-0.5 ${
+                        isMember
+                          ? 'border border-emerald-300/40 bg-emerald-500/15 text-emerald-100'
+                          : 'border border-white/10 bg-white/5 text-slate-300'
+                      }`}
+                    >
+                      {isMember ? 'Member' : 'Free'}
+                    </span>
+                    {isAdmin && (
+                      <span className="rounded-full border border-primary-300/40 bg-primary-500/15 px-2 py-0.5 text-primary-100">
+                        Admin
+                      </span>
+                    )}
+                  </div>
+                </div>
                 <button
                   onClick={() => logout()}
                   className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"

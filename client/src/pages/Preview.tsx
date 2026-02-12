@@ -1,19 +1,27 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useProjectStore } from '../stores/projectStore';
 import { api, type ExportJobStatusResponse } from '../api/client';
 import { PreviewCanvas } from '../components/preview/PreviewCanvas';
 import { CopyEditor } from '../components/editor/CopyEditor';
 import { TemplatePicker } from '../components/template/TemplatePicker';
 import { ExportDialog } from '../components/export/ExportDialog';
+import { MembershipWechatCard } from '../components/common/MembershipWechatCard';
 import { useAuthStore } from '../stores/authStore';
 import { DEVICE_SIZES, TEMPLATES, dedupeLanguageCodes, getLanguageLabel } from '@appshots/shared';
-import type { CompositionModeId, DeviceSizeId, GeneratedCopy, TemplateStyleId } from '@appshots/shared';
+import type { CompositionModeId, DeviceSizeId, GeneratedCopy, TemplateStyleId, UsageResponse } from '@appshots/shared';
+import { membershipWechatLabel } from '../constants/membership';
 
 export default function Preview() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const { currentProject, setCurrentProject, updateCopy, setTemplate } = useProjectStore();
-  const isAuthenticated = useAuthStore((s) => s.status === 'authenticated' && !!s.user);
+  const authStatus = useAuthStore((s) => s.status);
+  const user = useAuthStore((s) => s.user);
+  const membership = useAuthStore((s) => s.membership);
+  const isAuthenticated = authStatus === 'authenticated' && !!user;
+  const isMember = membership?.status === 'active';
+  const forceExportMode = searchParams.get('mode') === 'export';
   const [currentIndex, setCurrentIndex] = useState(0);
   const [lang, setLang] = useState<string>('zh');
   const [showHints, setShowHints] = useState(true);
@@ -25,6 +33,7 @@ export default function Preview() {
   const [exportStatus, setExportStatus] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [usage, setUsage] = useState<UsageResponse | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -90,6 +99,26 @@ export default function Preview() {
   }, [lang, previewLanguages]);
 
   useEffect(() => {
+    if (forceExportMode) {
+      setShowExport(true);
+    }
+  }, [forceExportMode]);
+
+  useEffect(() => {
+    if (isAuthenticated && !isMember) {
+      setShowExport(true);
+    }
+  }, [isAuthenticated, isMember]);
+
+  useEffect(() => {
+    if (authStatus === 'loading' || authStatus === 'idle') {
+      return;
+    }
+    if (authStatus === 'unauthenticated') {
+      setIsLoading(false);
+      setLoadError(null);
+      return;
+    }
     if (!id) {
       setLoadError('缺少项目 ID');
       setIsLoading(false);
@@ -122,7 +151,28 @@ export default function Preview() {
     return () => {
       isActive = false;
     };
-  }, [id, currentProject?.id, reloadKey, setCurrentProject]);
+  }, [authStatus, id, currentProject?.id, reloadKey, setCurrentProject]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setUsage(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .getUsage()
+      .then((data) => {
+        if (cancelled || isUnmountedRef.current) return;
+        setUsage(data);
+      })
+      .catch(() => {
+        if (cancelled || isUnmountedRef.current) return;
+        setUsage(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, membership?.status]);
 
   useEffect(() => {
     isUnmountedRef.current = false;
@@ -301,6 +351,10 @@ export default function Preview() {
     includeWatermark: boolean;
   }) => {
     if (!id) return;
+    if (!isAuthenticated) {
+      alert('请先登录后再导出。');
+      return;
+    }
 
     const safeExportUpdate = (fn: () => void) => {
       if (isUnmountedRef.current) return;
@@ -347,6 +401,25 @@ export default function Preview() {
       }
     }
   };
+
+  if (authStatus === 'unauthenticated') {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-16">
+        <div className="sf-card p-10 text-center">
+          <h2 className="sf-display text-2xl font-bold text-white">请先登录后查看项目</h2>
+          <p className="mx-auto mt-3 max-w-md text-sm text-slate-300">登录后可继续编辑、导出并管理你的项目资产。</p>
+          <div className="mt-6 flex items-center justify-center gap-3">
+            <Link to="/login" className="sf-btn-primary">
+              去登录
+            </Link>
+            <Link to="/" className="sf-btn-ghost">
+              返回首页
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loadError) {
     return (
@@ -484,6 +557,8 @@ export default function Preview() {
     if (!completionSummary) return '等待生成文案';
     return `已完成 ${completionSummary.completed} / ${screenshotCount}`;
   })();
+  const canUseEditor = Boolean(isMember);
+  const shouldShowExport = showExport || !canUseEditor;
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 shadow-[0_20px_50px_rgba(6,7,12,0.45)] backdrop-blur">
@@ -500,33 +575,76 @@ export default function Preview() {
             <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${saveStatusMeta.className}`}>
               {saveStatusMeta.label}
             </span>
+            <span
+              className={`rounded-full px-2.5 py-1 text-[11px] uppercase tracking-[0.18em] ${
+                isMember
+                  ? 'border border-emerald-300/40 bg-emerald-500/15 text-emerald-100'
+                  : 'border border-white/10 bg-white/5 text-slate-300'
+              }`}
+            >
+              {isMember ? 'Member' : 'Free'}
+            </span>
+            {isAuthenticated && (
+              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-300">
+                {isMember ? '分析额度：无限' : `今日分析：${usage?.analysisUsedToday ?? 0}/1`}
+              </span>
+            )}
             {saveMessage && saveStatus === 'error' && <span className="text-rose-200">{saveMessage}</span>}
             {saveStatus === 'saving' && <span className="text-[11px] text-slate-500">自动合并变更中…</span>}
           </div>
           <p className="mt-2 text-xs text-slate-500">最近更新：{updatedText}</p>
         </div>
 
-        <button
-          onClick={() => setShowExport(!showExport)}
-          disabled={isExporting}
-          className={showExport ? 'sf-btn-ghost' : 'sf-btn-primary'}
-        >
-          {isExporting ? `导出中 ${Math.round(exportProgress)}%` : showExport ? '返回编辑' : '导出素材'}
-        </button>
+        {canUseEditor ? (
+          <button
+            onClick={() => setShowExport(!showExport)}
+            disabled={isExporting}
+            className={showExport ? 'sf-btn-ghost' : 'sf-btn-primary'}
+          >
+            {isExporting ? `导出中 ${Math.round(exportProgress)}%` : showExport ? '返回编辑' : '导出素材'}
+          </button>
+        ) : (
+          <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-right text-xs text-amber-100">
+            <p>免费版仅支持导出交付，编辑功能为会员专享。</p>
+            <p className="mt-1 text-amber-50/90">开通会员请联系 {membershipWechatLabel()}</p>
+          </div>
+        )}
       </div>
 
-      {showExport ? (
-        <ExportDialog
-          onExport={handleExport}
-          isExporting={isExporting}
-          exportProgress={exportProgress}
-          exportStatus={exportStatus}
-          canUseAdvancedExport={isAuthenticated}
-          screenshotCount={screenshotCount}
-          canExportProject={canExportProject}
-          projectStatusLabel={statusLabel}
-          availableLanguages={previewLanguages}
-        />
+      {shouldShowExport ? (
+        <div className="mx-auto max-w-3xl space-y-4">
+          {!canUseEditor && (
+            <div className="sf-card-soft rounded-2xl p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">会员功能说明</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {[
+                  '预览编辑（模板与文案）',
+                  '多语言分析与导出',
+                  '无水印导出',
+                  `微信手动开通：${membershipWechatLabel()}`,
+                ].map((item) => (
+                  <div key={item} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200">
+                    {item}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3">
+                <MembershipWechatCard compact />
+              </div>
+            </div>
+          )}
+          <ExportDialog
+            onExport={handleExport}
+            isExporting={isExporting}
+            exportProgress={exportProgress}
+            exportStatus={exportStatus}
+            isMember={Boolean(isMember)}
+            screenshotCount={screenshotCount}
+            canExportProject={canExportProject}
+            projectStatusLabel={statusLabel}
+            availableLanguages={previewLanguages}
+          />
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
           <div className="space-y-4">

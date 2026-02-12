@@ -1,7 +1,9 @@
-import { Router, type NextFunction, type Request, type Response } from 'express';
-import { desc, eq } from 'drizzle-orm';
+import { Router } from 'express';
+import { nanoid } from 'nanoid';
+import { and, desc, eq, gt, isNull, or } from 'drizzle-orm';
 import { db, schema } from '../db/connection.js';
-import { env } from '../config/env.js';
+import { requireAdmin, getUserId } from '../middleware/auth.js';
+import type { MembershipInfo } from '@appshots/shared';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -10,21 +12,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.resolve(__dirname, '../../../uploads');
 
 const router: Router = Router();
-
-function requireAdminKey(req: Request, res: Response, next: NextFunction): void {
-  if (!env.adminKey) {
-    res.status(503).json({ message: 'Admin API is disabled. Set ADMIN_KEY first.' });
-    return;
-  }
-
-  const token = req.header('x-admin-key');
-  if (!token || token !== env.adminKey) {
-    res.status(401).json({ message: 'Invalid admin key' });
-    return;
-  }
-
-  next();
-}
 
 function parseStringArray(raw: unknown): string[] {
   if (typeof raw !== 'string' || raw.length === 0) return [];
@@ -62,8 +49,37 @@ function deleteProjectAssets(project: typeof schema.projects.$inferSelect): void
   screenshots.forEach((filename) => safeDeleteFile(filename));
 }
 
-router.use(requireAdminKey);
+async function getActiveMembershipInfo(userId: string): Promise<MembershipInfo | null> {
+  const now = new Date();
+  const [membership] = await db
+    .select()
+    .from(schema.memberships)
+    .where(
+      and(
+        eq(schema.memberships.userId, userId),
+        eq(schema.memberships.status, 'active'),
+        or(
+          isNull(schema.memberships.expiresAt),
+          gt(schema.memberships.expiresAt, now),
+        ),
+      ),
+    )
+    .orderBy(desc(schema.memberships.activatedAt))
+    .limit(1);
 
+  if (!membership) return null;
+
+  return {
+    status: 'active',
+    activatedAt: membership.activatedAt instanceof Date ? membership.activatedAt.toISOString() : String(membership.activatedAt),
+    expiresAt: membership.expiresAt instanceof Date ? membership.expiresAt.toISOString() : membership.expiresAt ? String(membership.expiresAt) : null,
+  };
+}
+
+// All admin routes require admin auth (role-based or legacy admin key)
+router.use(requireAdmin);
+
+// List all users with projects and membership info
 router.get('/users', async (_req, res, next) => {
   try {
     const users = await db.select().from(schema.users).orderBy(desc(schema.users.createdAt));
@@ -76,12 +92,30 @@ router.get('/users', async (_req, res, next) => {
           .where(eq(schema.projects.ownerUserId, user.id))
           .orderBy(desc(schema.projects.updatedAt));
 
+        const membership = await getActiveMembershipInfo(user.id);
+
+        // Count today's analysis usage
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const todayUsage = await db
+          .select()
+          .from(schema.analysisUsage)
+          .where(
+            and(
+              eq(schema.analysisUsage.userId, user.id),
+              gt(schema.analysisUsage.usedAt, startOfDay),
+            ),
+          );
+
         return {
           id: user.id,
           email: user.email,
+          role: user.role ?? 'user',
+          membership,
           createdAt: toIso(user.createdAt),
           updatedAt: toIso(user.updatedAt),
           projectCount: projects.length,
+          analysisCountToday: todayUsage.length,
           projects: projects.map((project) => ({
             id: project.id,
             appName: project.appName,
@@ -101,6 +135,142 @@ router.get('/users', async (_req, res, next) => {
   }
 });
 
+// List active members
+router.get('/members', async (_req, res, next) => {
+  try {
+    const now = new Date();
+    const activeMembers = await db
+      .select()
+      .from(schema.memberships)
+      .where(
+        and(
+          eq(schema.memberships.status, 'active'),
+          or(
+            isNull(schema.memberships.expiresAt),
+            gt(schema.memberships.expiresAt, now),
+          ),
+        ),
+      )
+      .orderBy(desc(schema.memberships.activatedAt));
+
+    const membersWithUsers = await Promise.all(
+      activeMembers.map(async (m) => {
+        const [user] = await db.select().from(schema.users).where(eq(schema.users.id, m.userId));
+        return {
+          ...m,
+          activatedAt: toIso(m.activatedAt),
+          expiresAt: m.expiresAt ? toIso(m.expiresAt) : null,
+          createdAt: toIso(m.createdAt),
+          updatedAt: toIso(m.updatedAt),
+          user: user ? { id: user.id, email: user.email, role: user.role ?? 'user' } : null,
+        };
+      }),
+    );
+
+    res.json({ members: membersWithUsers, total: membersWithUsers.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Set user role
+router.patch('/users/:userId/role', async (req, res, next) => {
+  try {
+    const { role } = req.body as { role: string };
+    const operatorUserId = getUserId(req);
+    if (role !== 'user' && role !== 'admin') {
+      res.status(400).json({ message: 'Invalid role. Must be "user" or "admin".' });
+      return;
+    }
+
+    if (operatorUserId && operatorUserId === req.params.userId && role === 'user') {
+      res.status(400).json({ message: 'Cannot remove your own admin role' });
+      return;
+    }
+
+    const [user] = await db.select().from(schema.users).where(eq(schema.users.id, req.params.userId));
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    await db.update(schema.users).set({ role, updatedAt: new Date() }).where(eq(schema.users.id, req.params.userId));
+    res.json({ message: 'Role updated', userId: req.params.userId, role });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Activate or revoke membership
+router.post('/users/:userId/membership', async (req, res, next) => {
+  try {
+    const { action, expiresAt, note } = req.body as {
+      action: 'activate' | 'revoke';
+      expiresAt?: string | null;
+      note?: string;
+    };
+    const adminUserId = getUserId(req);
+
+    const [user] = await db.select().from(schema.users).where(eq(schema.users.id, req.params.userId));
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    const now = new Date();
+
+    if (action === 'activate') {
+      const parsedExpiresAt = expiresAt ? new Date(expiresAt) : null;
+      if (parsedExpiresAt && Number.isNaN(parsedExpiresAt.getTime())) {
+        res.status(400).json({ message: 'Invalid expiresAt value' });
+        return;
+      }
+
+      // Revoke any existing active membership first
+      await db
+        .update(schema.memberships)
+        .set({ status: 'revoked', updatedAt: now })
+        .where(
+          and(
+            eq(schema.memberships.userId, req.params.userId),
+            eq(schema.memberships.status, 'active'),
+          ),
+        );
+
+      // Create new membership
+      const membership = {
+        id: nanoid(),
+        userId: req.params.userId,
+        status: 'active' as const,
+        activatedAt: now,
+        expiresAt: parsedExpiresAt,
+        activatedBy: adminUserId || null,
+        note: note || null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await db.insert(schema.memberships).values(membership);
+      res.json({ message: 'Membership activated', membership: { ...membership, activatedAt: toIso(now), expiresAt: expiresAt || null } });
+    } else if (action === 'revoke') {
+      await db
+        .update(schema.memberships)
+        .set({ status: 'revoked', updatedAt: now })
+        .where(
+          and(
+            eq(schema.memberships.userId, req.params.userId),
+            eq(schema.memberships.status, 'active'),
+          ),
+        );
+      res.json({ message: 'Membership revoked' });
+    } else {
+      res.status(400).json({ message: 'Invalid action. Must be "activate" or "revoke".' });
+    }
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete project
 router.delete('/projects/:projectId', async (req, res, next) => {
   try {
     const [project] = await db.select().from(schema.projects).where(eq(schema.projects.id, req.params.projectId));
@@ -118,6 +288,7 @@ router.delete('/projects/:projectId', async (req, res, next) => {
   }
 });
 
+// Delete user and all their projects
 router.delete('/users/:userId', async (req, res, next) => {
   try {
     const userId = req.params.userId;
@@ -131,6 +302,8 @@ router.delete('/users/:userId', async (req, res, next) => {
     projects.forEach((project) => deleteProjectAssets(project));
 
     await db.delete(schema.projects).where(eq(schema.projects.ownerUserId, userId));
+    await db.delete(schema.memberships).where(eq(schema.memberships.userId, userId));
+    await db.delete(schema.analysisUsage).where(eq(schema.analysisUsage.userId, userId));
     await db.delete(schema.verificationCodes).where(eq(schema.verificationCodes.email, user.email));
     await db.delete(schema.users).where(eq(schema.users.id, userId));
 

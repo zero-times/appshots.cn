@@ -16,6 +16,8 @@ interface AppInfoFormProps {
   onSubmit: () => void;
   isLoading: boolean;
   error?: string | null;
+  languageSelectionLocked?: boolean;
+  languageLockHint?: string;
 }
 
 export function AppInfoForm({
@@ -28,6 +30,8 @@ export function AppInfoForm({
   onSubmit,
   isLoading,
   error,
+  languageSelectionLocked = false,
+  languageLockHint,
 }: AppInfoFormProps) {
   const [customLanguage, setCustomLanguage] = useState('');
   const nameCount = appName.trim().length;
@@ -39,6 +43,7 @@ export function AppInfoForm({
   );
 
   const toggleLanguage = (code: string) => {
+    if (languageSelectionLocked) return;
     const normalized = normalizeLanguageCode(code);
     const exists = supportedLanguages.includes(normalized);
     if (exists) {
@@ -51,6 +56,7 @@ export function AppInfoForm({
   };
 
   const addCustomLanguage = () => {
+    if (languageSelectionLocked) return;
     const normalized = normalizeLanguageCode(customLanguage);
     if (!normalized) return;
     onSupportedLanguagesChange(dedupeLanguageCodes([...supportedLanguages, normalized], supportedLanguages));
@@ -107,17 +113,23 @@ export function AppInfoForm({
             <span className="text-[11px] text-slate-500">至少 1 种</span>
           </div>
           <p className="text-xs text-slate-400">AI 将在一次分析中直接返回所选语言的标题与副标题。</p>
+          {languageSelectionLocked && languageLockHint && (
+            <div className="rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+              {languageLockHint}
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             {languageOptions.map((code) => (
               <button
                 key={code}
                 type="button"
                 onClick={() => toggleLanguage(code)}
+                disabled={languageSelectionLocked}
                 className={`rounded-lg px-3 py-1.5 text-sm transition ${
                   supportedLanguages.includes(code)
                     ? 'bg-primary-500/20 text-primary-100 ring-1 ring-primary-400/60'
                     : 'bg-white/5 text-slate-300 ring-1 ring-white/10 hover:bg-white/10'
-                }`}
+                } ${languageSelectionLocked ? 'cursor-not-allowed opacity-60' : ''}`}
               >
                 {getLanguageLabel(code)}
               </button>
@@ -129,8 +141,14 @@ export function AppInfoForm({
               onChange={(event) => setCustomLanguage(event.target.value)}
               placeholder="添加语言代码，例如：es / fr / de"
               className="sf-input max-w-[280px]"
+              disabled={languageSelectionLocked}
             />
-            <button type="button" onClick={addCustomLanguage} className="sf-btn-ghost px-3 py-1.5 text-xs">
+            <button
+              type="button"
+              onClick={addCustomLanguage}
+              className="sf-btn-ghost px-3 py-1.5 text-xs"
+              disabled={languageSelectionLocked}
+            >
               添加语言
             </button>
           </div>

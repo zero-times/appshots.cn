@@ -5,13 +5,14 @@ import {
   getLanguageLabel,
 } from '@appshots/shared';
 import type { DeviceSizeId } from '@appshots/shared';
+import { membershipWechatLabel } from '../../constants/membership';
 
 interface ExportDialogProps {
   onExport: (options: { deviceSizes: DeviceSizeId[]; languages: string[]; includeWatermark: boolean }) => void;
   isExporting: boolean;
   exportProgress: number;
   exportStatus: string;
-  canUseAdvancedExport: boolean;
+  isMember: boolean;
   screenshotCount: number;
   canExportProject: boolean;
   projectStatusLabel: string;
@@ -23,7 +24,7 @@ export function ExportDialog({
   isExporting,
   exportProgress,
   exportStatus,
-  canUseAdvancedExport,
+  isMember,
   screenshotCount,
   canExportProject,
   projectStatusLabel,
@@ -44,13 +45,20 @@ export function ExportDialog({
 
   useEffect(() => {
     setSelectedLanguages((prev) => {
+      if (!isMember) {
+        const fallback = languageOptions.includes('zh') ? 'zh' : languageOptions[0] ?? 'zh';
+        return [fallback];
+      }
       const retained = prev.filter((code) => languageOptions.includes(code));
       if (retained.length > 0) return retained;
       return [...languageOptions];
     });
-  }, [languageOptions]);
+  }, [isMember, languageOptions]);
 
   const toggleLanguage = (code: string) => {
+    if (!isMember) {
+      return;
+    }
     setSelectedLanguages((prev) => (prev.includes(code) ? prev.filter((item) => item !== code) : [...prev, code]));
   };
 
@@ -88,22 +96,30 @@ export function ExportDialog({
 
       <div>
         <h3 className="text-sm font-semibold text-slate-200">导出语言</h3>
-        <p className="mt-1 text-xs text-slate-400">仅支持当前项目已生成的语言，可按需勾选/取消。</p>
+        <p className="mt-1 text-xs text-slate-400">
+          {isMember
+            ? '仅支持当前项目已生成的语言，可按需勾选/取消。'
+            : '免费版导出仅支持 1 种语言（默认选择第一种）。'}
+        </p>
         <div className="mt-3 flex flex-wrap gap-2">
           {languageOptions.map((code) => (
             <button
               key={code}
               onClick={() => toggleLanguage(code)}
+              disabled={!isMember}
               className={`rounded-lg px-3 py-1.5 text-sm transition ${
                 selectedLanguages.includes(code)
                   ? 'bg-primary-500/20 text-primary-100 ring-1 ring-primary-400/60'
                   : 'bg-white/5 text-slate-300 ring-1 ring-white/10 hover:bg-white/10'
-              }`}
+              } ${!isMember ? 'cursor-not-allowed opacity-70' : ''}`}
             >
               {getLanguageLabel(code)}
             </button>
           ))}
         </div>
+        {!isMember && (
+          <p className="mt-2 text-xs text-amber-100">会员可开启多语言打包导出与无水印交付。</p>
+        )}
         {languageSelectionEmpty && <p className="mt-2 text-xs text-amber-200">请至少选择一种语言用于导出。</p>}
       </div>
 
@@ -159,25 +175,28 @@ export function ExportDialog({
         </button>
         <button
           onClick={() => {
-            if (!canUseAdvancedExport) {
-              alert('请先登录后使用高级导出（无水印）。');
+            if (!isMember) {
+              alert('无水印导出仅限会员使用。');
               return;
             }
             onExport({ deviceSizes, languages: selectedLanguages, includeWatermark: false });
           }}
-          disabled={exportDisabled || !canUseAdvancedExport}
+          disabled={exportDisabled || !isMember}
           className="sf-btn-primary flex-1"
-          title={canUseAdvancedExport ? '高级导出（无水印）' : '登录后可使用高级导出（无水印）'}
+          title={isMember ? '高级导出（无水印）' : '会员可使用无水印导出'}
         >
-          {isExporting ? '导出中...' : canUseAdvancedExport ? '高级导出（无水印）' : '登录后可用高级导出'}
+          {isExporting ? '导出中...' : isMember ? '高级导出（无水印）' : '会员专享：无水印导出'}
         </button>
       </div>
 
       <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-400">
-        {canUseAdvancedExport ? (
-          <p>高级导出为无水印素材，5 分钟内仅可触发一次。</p>
+        {isMember ? (
+          <p>会员支持无水印导出，且高级导出 5 分钟内最多触发一次。</p>
         ) : (
-          <p>登录后可解锁无水印导出，并同步历史项目与模板设置。</p>
+          <p>
+            免费版默认带水印且仅单语言导出，升级会员可解锁无水印与多语言导出（{membershipWechatLabel()}
+            手动开通）。
+          </p>
         )}
       </div>
     </div>

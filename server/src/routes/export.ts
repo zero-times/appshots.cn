@@ -14,7 +14,7 @@ import {
 import { TEMPLATES, DEVICE_SIZES, DEFAULT_EXPORT_LANGUAGES, dedupeLanguageCodes, normalizeLanguageCode } from '@appshots/shared';
 import type { DeviceSizeId, ExportRequest, GeneratedCopy, TemplateStyleId } from "@appshots/shared";
 import { getSessionId } from '../middleware/session.js';
-import { getUserId } from '../middleware/auth.js';
+import { getUserId, requireAuth, getIsMember } from '../middleware/auth.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -33,6 +33,11 @@ function projectScope(projectId: string, sessionId: string, userId?: string) {
     ? or(eq(schema.projects.ownerUserId, userId), eq(schema.projects.ownerSessionId, sessionId))
     : eq(schema.projects.ownerSessionId, sessionId);
   return and(eq(schema.projects.id, projectId), ownerCondition);
+}
+
+function getRouteParam(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0] ?? '';
+  return value ?? '';
 }
 
 type ExportProject = typeof schema.projects.$inferSelect;
@@ -252,12 +257,13 @@ function getLocalizedCopyText(
   return '';
 }
 
-// Preview a single composed screenshot
-router.get('/projects/:id/preview/:index', async (req, res, next) => {
+// Preview a single composed screenshot (login required)
+router.get('/projects/:id/preview/:index', requireAuth, async (req, res, next) => {
   try {
     const sessionId = getSessionId(req);
     const userId = getUserId(req);
-    const scope = projectScope(req.params.id, sessionId, userId);
+    const projectId = getRouteParam(req.params.id);
+    const scope = projectScope(projectId, sessionId, userId);
     const [project] = await db.select().from(schema.projects).where(scope);
     if (!project) {
       res.status(404).json({ message: 'Project not found' });
@@ -265,7 +271,7 @@ router.get('/projects/:id/preview/:index', async (req, res, next) => {
     }
 
     const screenshotPaths = safeParseJson<string[]>(project.screenshotPaths, []);
-    const index = parseInt(req.params.index, 10);
+    const index = parseInt(getRouteParam(req.params.index), 10);
     if (index < 0 || index >= screenshotPaths.length) {
       res.status(400).json({ message: 'Invalid screenshot index' });
       return;
@@ -308,12 +314,14 @@ router.get('/projects/:id/preview/:index', async (req, res, next) => {
   }
 });
 
-// Start export job (for real-time progress)
-router.post('/projects/:id/export/jobs', async (req, res, next) => {
+// Start export job (login required)
+router.post('/projects/:id/export/jobs', requireAuth, async (req, res, next) => {
   try {
     const sessionId = getSessionId(req);
     const userId = getUserId(req);
-    const scope = projectScope(req.params.id, sessionId, userId);
+    const isMember = getIsMember(req);
+    const projectId = getRouteParam(req.params.id);
+    const scope = projectScope(projectId, sessionId, userId);
     const [project] = await db.select().from(schema.projects).where(scope);
     if (!project) {
       res.status(404).json({ message: 'Project not found' });
@@ -322,13 +330,21 @@ router.post('/projects/:id/export/jobs', async (req, res, next) => {
 
     const body = req.body as ExportRequest;
 
-    if (body.includeWatermark === false && !userId) {
-      res.status(401).json({ message: '请先登录后再使用高级导出' });
+    // Free user constraints: force watermark, restrict to single language
+    if (!isMember) {
+      body.includeWatermark = true;
+      body.languages = ['zh'];
+      body.language = 'zh';
+    }
+
+    // No-watermark export requires membership
+    if (body.includeWatermark === false && !isMember) {
+      res.status(403).json({ message: '无水印导出仅限会员使用' });
       return;
     }
 
     if (body.includeWatermark === false) {
-      const cooldownLeftMs = getAdvancedExportCooldownLeftMs(req.params.id, sessionId, userId);
+      const cooldownLeftMs = getAdvancedExportCooldownLeftMs(projectId, sessionId, userId);
       if (cooldownLeftMs > 0) {
         const waitMinutes = Math.ceil(cooldownLeftMs / 60000);
         res.status(429).json({ message: `高级导出调用过于频繁，请 ${waitMinutes} 分钟后再试` });
@@ -349,11 +365,11 @@ router.post('/projects/:id/export/jobs', async (req, res, next) => {
     }
 
     if (body.includeWatermark === false) {
-      markAdvancedExportRequested(req.params.id, sessionId, userId);
+      markAdvancedExportRequested(projectId, sessionId, userId);
     }
 
-    const job = createExportJob(req.params.id, sessionId);
-    void runExportJob(job.jobId, req.params.id, body);
+    const job = createExportJob(projectId, sessionId);
+    void runExportJob(job.jobId, projectId, body);
 
     res.status(202).json(job);
   } catch (err) {
@@ -363,7 +379,8 @@ router.post('/projects/:id/export/jobs', async (req, res, next) => {
 
 // Query export job progress
 router.get('/export/jobs/:jobId', (req, res) => {
-  const job = getExportJob(req.params.jobId);
+  const jobId = getRouteParam(req.params.jobId);
+  const job = getExportJob(jobId);
   if (!job) {
     res.status(404).json({ message: 'Export job not found or expired' });
     return;
@@ -374,7 +391,7 @@ router.get('/export/jobs/:jobId', (req, res) => {
 
 // Stream export job progress (SSE)
 router.get('/export/jobs/:jobId/stream', (req, res) => {
-  const { jobId } = req.params;
+  const jobId = getRouteParam(req.params.jobId);
   const current = getExportJob(jobId);
   if (!current) {
     res.status(404).json({ message: 'Export job not found or expired' });
@@ -424,12 +441,14 @@ router.get('/export/jobs/:jobId/stream', (req, res) => {
   });
 });
 
-// Legacy export API (kept for compatibility)
-router.post('/projects/:id/export', async (req, res, next) => {
+// Legacy export API (login required)
+router.post('/projects/:id/export', requireAuth, async (req, res, next) => {
   try {
     const sessionId = getSessionId(req);
     const userId = getUserId(req);
-    const scope = projectScope(req.params.id, sessionId, userId);
+    const isMember = getIsMember(req);
+    const projectId = getRouteParam(req.params.id);
+    const scope = projectScope(projectId, sessionId, userId);
     const [project] = await db.select().from(schema.projects).where(scope);
     if (!project) {
       res.status(404).json({ message: 'Project not found' });
@@ -438,20 +457,27 @@ router.post('/projects/:id/export', async (req, res, next) => {
 
     const body = req.body as ExportRequest;
 
-    if (body.includeWatermark === false && !userId) {
-      res.status(401).json({ message: '请先登录后再使用高级导出' });
+    // Free user constraints
+    if (!isMember) {
+      body.includeWatermark = true;
+      body.languages = ['zh'];
+      body.language = 'zh';
+    }
+
+    if (body.includeWatermark === false && !isMember) {
+      res.status(403).json({ message: '无水印导出仅限会员使用' });
       return;
     }
 
     if (body.includeWatermark === false) {
-      const cooldownLeftMs = getAdvancedExportCooldownLeftMs(req.params.id, sessionId, userId);
+      const cooldownLeftMs = getAdvancedExportCooldownLeftMs(projectId, sessionId, userId);
       if (cooldownLeftMs > 0) {
         const waitMinutes = Math.ceil(cooldownLeftMs / 60000);
         res.status(429).json({ message: `高级导出调用过于频繁，请 ${waitMinutes} 分钟后再试` });
         return;
       }
 
-      markAdvancedExportRequested(req.params.id, sessionId, userId);
+      markAdvancedExportRequested(projectId, sessionId, userId);
     }
 
     const payload = buildExportPayload(project, body);
@@ -487,7 +513,7 @@ router.post('/projects/:id/export', async (req, res, next) => {
 
 // Download export ZIP
 router.get('/export/:filename', (req, res) => {
-  const filepath = path.join(exportsDir, req.params.filename);
+  const filepath = path.join(exportsDir, getRouteParam(req.params.filename));
   if (!fs.existsSync(filepath)) {
     res.status(404).json({ message: 'File not found' });
     return;

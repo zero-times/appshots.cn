@@ -5,6 +5,7 @@ import type {
   LogoutResponse,
   MeResponse,
   SendCodeResponse,
+  UsageResponse,
 } from '@appshots/shared';
 
 const API_BASE = '/api';
@@ -39,7 +40,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 async function adminRequest<T>(path: string, adminKey: string, options?: RequestInit): Promise<T> {
   const headers = new Headers(options?.headers);
   headers.set('Content-Type', 'application/json');
-  headers.set('x-admin-key', adminKey);
+  // Support both role-based (cookie) and key-based admin auth
+  if (adminKey && adminKey !== '__cookie__') {
+    headers.set('x-admin-key', adminKey);
+  }
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers,
@@ -67,7 +71,7 @@ export const api = {
   },
 
   analyzeProject: (projectId: string, payload?: AnalyzeProjectRequest) =>
-    request<AnalyzeResponse>(`/projects/${projectId}/analyze`, {
+    request<AnalyzeResponse & { isMember?: boolean }>(`/projects/${projectId}/analyze`, {
       method: 'POST',
       body: JSON.stringify(payload ?? {}),
     }),
@@ -114,11 +118,30 @@ export const api = {
 
   logout: () => request<LogoutResponse>('/auth/logout', { method: 'POST' }),
 
-  // Admin
+  getUsage: () => request<UsageResponse>('/auth/usage'),
+
+  // Admin (supports both cookie-based role auth and key-based auth)
   adminListUsers: (adminKey: string) =>
     adminRequest<{ users: Array<Record<string, unknown>>; total: number }>('/admin/users', adminKey),
+
+  adminListMembers: (adminKey: string) =>
+    adminRequest<{ members: Array<Record<string, unknown>>; total: number }>('/admin/members', adminKey),
+
+  adminSetRole: (adminKey: string, userId: string, role: string) =>
+    adminRequest<{ message: string }>(`/admin/users/${userId}/role`, adminKey, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    }),
+
+  adminSetMembership: (adminKey: string, userId: string, action: string, expiresAt?: string | null, note?: string) =>
+    adminRequest<{ message: string }>(`/admin/users/${userId}/membership`, adminKey, {
+      method: 'POST',
+      body: JSON.stringify({ action, expiresAt, note }),
+    }),
+
   adminDeleteProject: (adminKey: string, projectId: string) =>
     adminRequest<{ message: string }>(`/admin/projects/${projectId}`, adminKey, { method: 'DELETE' }),
+
   adminDeleteUser: (adminKey: string, userId: string) =>
     adminRequest<{ message: string; deletedProjectCount: number }>(`/admin/users/${userId}`, adminKey, {
       method: 'DELETE',
