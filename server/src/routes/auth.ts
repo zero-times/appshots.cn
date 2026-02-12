@@ -72,12 +72,13 @@ router.post('/send-code', async (req, res, next) => {
     }
 
     // Generate 6-digit code
+    const verificationId = nanoid();
     const code = crypto.randomInt(100000, 999999).toString();
     const now = new Date();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
     await db.insert(schema.verificationCodes).values({
-      id: nanoid(),
+      id: verificationId,
       email: normalizedEmail,
       code,
       expiresAt,
@@ -89,6 +90,8 @@ router.post('/send-code', async (req, res, next) => {
     const mailSent = await sendVerificationCode(normalizedEmail, code);
 
     if (!mailSent && process.env.NODE_ENV === 'production') {
+      // Avoid leaving unsent verification codes behind, which can cause false rate-limit blocks.
+      await db.delete(schema.verificationCodes).where(eq(schema.verificationCodes.id, verificationId));
       res.status(500).json({ message: '邮件发送失败，请稍后再试' });
       return;
     }
@@ -203,7 +206,7 @@ router.post('/verify-code', async (req, res, next) => {
 
     // Create JWT with role and set cookie
     const token = createAuthToken(user.id, user.email, user.role ?? 'user');
-    setAuthCookie(res, token);
+    setAuthCookie(req, res, token);
 
     const membership = await getActiveMembershipInfo(user.id);
 
@@ -306,8 +309,8 @@ router.get('/usage', async (req, res, next) => {
 });
 
 // POST /logout
-router.post('/logout', (_req, res) => {
-  clearAuthCookie(res);
+router.post('/logout', (req, res) => {
+  clearAuthCookie(req, res);
   res.json({ message: '已退出登录' });
 });
 

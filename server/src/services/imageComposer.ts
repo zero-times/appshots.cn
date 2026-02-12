@@ -546,15 +546,27 @@ function createTextSvg(options: TextSvgOptions): string {
 }
 
 function createWatermarkSvg(width: number, height: number, watermarkText: string): string {
-  const fontSize = Math.max(18, Math.round(Math.min(width, height) * 0.026));
-  const inset = Math.max(18, Math.round(width * 0.02));
+  const fontSize = Math.max(20, Math.round(Math.min(width, height) * 0.024));
+  const inset = Math.max(22, Math.round(width * 0.024));
+  const badgeHeight = Math.round(fontSize * 1.7);
+  const horizontalPadding = Math.round(fontSize * 0.72);
+  const textWidthEstimate = Math.round(watermarkText.length * fontSize * 0.62);
+  const badgeWidth = textWidthEstimate + horizontalPadding * 2;
+  const badgeX = Math.max(inset, width - inset - badgeWidth);
+  const badgeY = Math.max(inset, height - inset - badgeHeight);
+  const textX = badgeX + badgeWidth / 2;
+  const textY = badgeY + badgeHeight / 2 + Math.round(fontSize * 0.34);
 
   return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <text x="${width - inset}" y="${height - inset}" text-anchor="end"
-      font-family="sans-serif" font-size="${fontSize}"
-      font-weight="600" fill="rgba(255,255,255,0.34)">
-      ${escapeXml(watermarkText)}
-    </text>
+    <g>
+      <rect x="${badgeX}" y="${badgeY}" width="${badgeWidth}" height="${badgeHeight}" rx="${Math.round(badgeHeight / 2)}"
+        fill="#020617" fill-opacity="0.58"/>
+      <text x="${textX}" y="${textY}" text-anchor="middle"
+        font-family="sans-serif" font-size="${fontSize}"
+        font-weight="700" fill="#FFFFFF" fill-opacity="0.9">
+        ${escapeXml(watermarkText)}
+      </text>
+    </g>
   </svg>`;
 }
 

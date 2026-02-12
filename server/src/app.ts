@@ -27,6 +27,8 @@ app.use(
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", 'data:', 'blob:'],
         connectSrc: ["'self'"],
+        // Avoid forcing HTTP->HTTPS upgrades from CSP to keep local Safari compatible.
+        upgradeInsecureRequests: null,
       },
     },
   }),

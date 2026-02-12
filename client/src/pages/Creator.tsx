@@ -56,7 +56,7 @@ export default function Creator() {
     if (used >= 1) {
       return `今日免费额度已用完，明天可继续使用，或通过 ${membershipWechatLabel()} 手动开通会员解锁无限分析。`;
     }
-    return `免费版每天 1 次分析，且仅支持中文文案；会员支持多语言与无限分析（${membershipWechatLabel()}）。`;
+    return `免费版每天 1 次分析，基础支持中英双语；会员支持更多语言与无限分析（${membershipWechatLabel()}）。`;
   }, [isAuthenticated, isMember, usage?.analysisUsedToday]);
 
   const loadUsage = useCallback(async () => {
@@ -93,7 +93,7 @@ export default function Creator() {
 
   useEffect(() => {
     if (languageSelectionLocked) {
-      setSupportedLanguages(['zh']);
+      setSupportedLanguages(['zh', 'en']);
     }
   }, [languageSelectionLocked]);
 
@@ -112,7 +112,7 @@ export default function Creator() {
     const name = nextName.trim();
     const description = nextDescription.trim();
     const languages = languageSelectionLocked
-      ? ['zh']
+      ? ['zh', 'en']
       : dedupeLanguageCodes(supportedLanguages, DEFAULT_EXPORT_LANGUAGES);
     if (!name) {
       setAnalysisError('请填写应用名称后再开始分析。');
@@ -295,7 +295,7 @@ export default function Creator() {
                 error={analysisError}
                 languageSelectionLocked={languageSelectionLocked}
                 languageLockHint={
-                  languageSelectionLocked ? '免费版仅支持中文（zh）文案输出，升级会员可一次生成多语言。' : undefined
+                  languageSelectionLocked ? '免费版基础支持中文（zh）+ 英文（en），升级会员可解锁更多语言。' : undefined
                 }
               />
             </div>

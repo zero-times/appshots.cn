@@ -20,6 +20,18 @@ interface JwtPayload {
   role?: string;
 }
 
+function isLocalHost(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
+}
+
+function shouldUseSecureCookie(req: Request): boolean {
+  const hostHeader = req.headers.host ?? '';
+  const host = hostHeader.split(':')[0] ?? '';
+  if (isLocalHost(host)) return false;
+  return process.env.NODE_ENV === 'production';
+}
+
 function parseCookies(raw: string | undefined): Record<string, string> {
   if (!raw) return {};
 
@@ -139,21 +151,21 @@ export function createAuthToken(userId: string, email: string, role?: string): s
   return jwt.sign({ userId, email, role: role ?? 'user' } as JwtPayload, env.jwtSecret, options);
 }
 
-export function setAuthCookie(res: Response, token: string): void {
+export function setAuthCookie(req: Request, res: Response, token: string): void {
   res.cookie(AUTH_COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: shouldUseSecureCookie(req),
     maxAge: AUTH_MAX_AGE_MS,
     path: '/',
   });
 }
 
-export function clearAuthCookie(res: Response): void {
+export function clearAuthCookie(req: Request, res: Response): void {
   res.clearCookie(AUTH_COOKIE_NAME, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: shouldUseSecureCookie(req),
     path: '/',
   });
 }

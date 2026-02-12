@@ -330,11 +330,11 @@ router.post('/projects/:id/export/jobs', requireAuth, async (req, res, next) => 
 
     const body = req.body as ExportRequest;
 
-    // Free user constraints: force watermark, restrict to single language
+    // Free user constraints: force watermark, restrict to basic zh/en
     if (!isMember) {
       body.includeWatermark = true;
-      body.languages = ['zh'];
-      body.language = 'zh';
+      body.languages = ['zh', 'en'];
+      body.language = 'both';
     }
 
     // No-watermark export requires membership
@@ -457,11 +457,11 @@ router.post('/projects/:id/export', requireAuth, async (req, res, next) => {
 
     const body = req.body as ExportRequest;
 
-    // Free user constraints
+    // Free user constraints: force watermark, restrict to basic zh/en
     if (!isMember) {
       body.includeWatermark = true;
-      body.languages = ['zh'];
-      body.language = 'zh';
+      body.languages = ['zh', 'en'];
+      body.language = 'both';
     }
 
     if (body.includeWatermark === false && !isMember) {

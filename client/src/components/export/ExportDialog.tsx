@@ -46,7 +46,9 @@ export function ExportDialog({
   useEffect(() => {
     setSelectedLanguages((prev) => {
       if (!isMember) {
-        const fallback = languageOptions.includes('zh') ? 'zh' : languageOptions[0] ?? 'zh';
+        const basicLanguages = ['zh', 'en'].filter((code) => languageOptions.includes(code));
+        if (basicLanguages.length > 0) return basicLanguages;
+        const fallback = languageOptions[0] ?? 'zh';
         return [fallback];
       }
       const retained = prev.filter((code) => languageOptions.includes(code));
@@ -99,7 +101,7 @@ export function ExportDialog({
         <p className="mt-1 text-xs text-slate-400">
           {isMember
             ? '仅支持当前项目已生成的语言，可按需勾选/取消。'
-            : '免费版导出仅支持 1 种语言（默认选择第一种）。'}
+            : '免费版导出基础支持中英双语（固定）。'}
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           {languageOptions.map((code) => (
@@ -118,7 +120,7 @@ export function ExportDialog({
           ))}
         </div>
         {!isMember && (
-          <p className="mt-2 text-xs text-amber-100">会员可开启多语言打包导出与无水印交付。</p>
+          <p className="mt-2 text-xs text-amber-100">会员可解锁更多语言打包导出与无水印交付。</p>
         )}
         {languageSelectionEmpty && <p className="mt-2 text-xs text-amber-200">请至少选择一种语言用于导出。</p>}
       </div>
@@ -194,7 +196,7 @@ export function ExportDialog({
           <p>会员支持无水印导出，且高级导出 5 分钟内最多触发一次。</p>
         ) : (
           <p>
-            免费版默认带水印且仅单语言导出，升级会员可解锁无水印与多语言导出（{membershipWechatLabel()}
+            免费版默认带水印且基础支持中英导出，升级会员可解锁无水印与更多语言导出（{membershipWechatLabel()}
             手动开通）。
           </p>
         )}

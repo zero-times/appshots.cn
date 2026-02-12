@@ -69,6 +69,10 @@ NODE_IMAGE=public.ecr.aws/docker/library/node:20-bookworm-slim docker-compose up
 
 部署后默认服务端口：`3001`。
 
+如果你使用宝塔面板部署，请看：
+
+- `docs/deploy-bt.md`（Node + Nginx + PM2 快速部署）
+
 ## 技能化导出（推荐给 Codex / Claude Code / Cursor 等 AI IDE）
 
 该模式不依赖网页流程，适合“模型先做图像理解和文案推荐，appshots 只负责渲染导出”。

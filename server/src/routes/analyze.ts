@@ -65,7 +65,7 @@ router.post('/:id/analyze', requireAuth, async (req, res, next) => {
     // Determine languages based on membership
     let requestedLanguages: string[];
     if (!isMember) {
-      requestedLanguages = ['zh']; // free users: single language only
+      requestedLanguages = ['zh', 'en']; // free users: basic zh/en only
     } else {
       const body = (req.body ?? {}) as AnalyzeProjectRequest;
       requestedLanguages = dedupeLanguageCodes(body.languages, DEFAULT_EXPORT_LANGUAGES);

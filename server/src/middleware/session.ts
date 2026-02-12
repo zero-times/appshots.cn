@@ -25,6 +25,18 @@ function createSessionId(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
+function isLocalHost(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
+}
+
+function shouldUseSecureCookie(req: Request): boolean {
+  const hostHeader = req.headers.host ?? '';
+  const host = hostHeader.split(':')[0] ?? '';
+  if (isLocalHost(host)) return false;
+  return process.env.NODE_ENV === 'production';
+}
+
 export function sessionMiddleware(req: Request, res: Response, next: NextFunction): void {
   const cookies = parseCookies(req.headers.cookie);
   const existing = cookies[SESSION_COOKIE_NAME];
@@ -36,7 +48,7 @@ export function sessionMiddleware(req: Request, res: Response, next: NextFunctio
     res.cookie(SESSION_COOKIE_NAME, sessionId, {
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      secure: shouldUseSecureCookie(req),
       maxAge: SESSION_MAX_AGE_MS,
       path: '/',
     });

@@ -62,6 +62,8 @@ export async function sendVerificationCode(to: string, code: string): Promise<bo
     console.log(`[Mail] Verification code sent to ${to}`);
     return true;
   } catch (err) {
+    // Reset cached transporter so next attempt can establish a fresh SMTP connection.
+    transporter = null;
     console.error(`[Mail] Failed to send to ${to}:`, err);
     return false;
   }
