@@ -151,7 +151,8 @@ function buildExportPayload(project: ExportProject, body: ExportRequest): {
     deviceSizes,
     languages,
     includeWatermark: body.includeWatermark ?? true,
-    watermarkText: body.watermarkText?.trim() || 'appshots',
+    // Keep a fixed watermark label to avoid unexpected client-provided text (e.g. "xxx").
+    watermarkText: 'appshots',
     fileCount,
   };
 }
