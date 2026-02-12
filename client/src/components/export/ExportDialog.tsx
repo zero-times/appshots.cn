@@ -13,6 +13,7 @@ interface ExportDialogProps {
   exportProgress: number;
   exportStatus: string;
   isMember: boolean;
+  isLocked?: boolean;
   screenshotCount: number;
   canExportProject: boolean;
   projectStatusLabel: string;
@@ -25,6 +26,7 @@ export function ExportDialog({
   exportProgress,
   exportStatus,
   isMember,
+  isLocked = false,
   screenshotCount,
   canExportProject,
   projectStatusLabel,
@@ -33,13 +35,15 @@ export function ExportDialog({
   const [deviceSizes, setDeviceSizes] = useState<DeviceSizeId[]>(['6.7']);
   const languageOptions = useMemo(() => dedupeLanguageCodes(availableLanguages, ['zh', 'en']), [availableLanguages]);
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>(() => [...languageOptions]);
+  const controlsLocked = isExporting || isLocked;
   const deviceSelectionEmpty = deviceSizes.length === 0;
   const hasScreenshots = screenshotCount > 0;
   const estimatedOutput = hasScreenshots ? deviceSizes.length * selectedLanguages.length * screenshotCount : 0;
   const languageSelectionEmpty = selectedLanguages.length === 0;
-  const exportDisabled = isExporting || deviceSelectionEmpty || languageSelectionEmpty || !hasScreenshots || !canExportProject;
+  const exportDisabled = controlsLocked || deviceSelectionEmpty || languageSelectionEmpty || !hasScreenshots || !canExportProject;
 
   const toggleDevice = (id: DeviceSizeId) => {
+    if (controlsLocked) return;
     setDeviceSizes((prev) => (prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]));
   };
 
@@ -58,7 +62,7 @@ export function ExportDialog({
   }, [isMember, languageOptions]);
 
   const toggleLanguage = (code: string) => {
-    if (!isMember) {
+    if (!isMember || controlsLocked) {
       return;
     }
     setSelectedLanguages((prev) => (prev.includes(code) ? prev.filter((item) => item !== code) : [...prev, code]));
@@ -84,6 +88,7 @@ export function ExportDialog({
                   type="checkbox"
                   checked={checked}
                   onChange={() => toggleDevice(d.id)}
+                  disabled={controlsLocked}
                   className="h-4 w-4 rounded border-white/20 bg-slate-900 text-primary-500"
                 />
                 {d.name}
@@ -108,12 +113,12 @@ export function ExportDialog({
             <button
               key={code}
               onClick={() => toggleLanguage(code)}
-              disabled={!isMember}
+              disabled={!isMember || controlsLocked}
               className={`rounded-lg px-3 py-1.5 text-sm transition ${
                 selectedLanguages.includes(code)
                   ? 'bg-primary-500/20 text-primary-100 ring-1 ring-primary-400/60'
                   : 'bg-white/5 text-slate-300 ring-1 ring-white/10 hover:bg-white/10'
-              } ${!isMember ? 'cursor-not-allowed opacity-70' : ''}`}
+              } ${!isMember || controlsLocked ? 'cursor-not-allowed opacity-70' : ''}`}
             >
               {getLanguageLabel(code)}
             </button>
@@ -145,11 +150,12 @@ export function ExportDialog({
           ))}
         </div>
         {!hasScreenshots && <p className="mt-2 text-[11px] text-amber-200">请先上传截图后再导出。</p>}
-        {!canExportProject && (
+        {!canExportProject && !isLocked && (
           <p className="mt-2 text-[11px] text-amber-200">
             当前项目状态为「{projectStatusLabel}」，完成分析后即可导出。
           </p>
         )}
+        {isLocked && <p className="mt-2 text-[11px] text-amber-200">当前项目已封存，导出参数不可再修改。</p>}
       </div>
 
       {(isExporting || exportProgress > 0) && (

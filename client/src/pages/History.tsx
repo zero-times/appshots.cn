@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuthStore } from '../stores/authStore';
+import { usePageSeo } from '../utils/seo';
 
 interface ProjectItem {
   id: string;
@@ -11,6 +12,8 @@ interface ProjectItem {
   updatedAt?: string;
   templateStyle?: string;
   screenshotPaths: string[];
+  lastExportZipUrl?: string | null;
+  lastExportedAt?: string | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -18,7 +21,7 @@ const STATUS_LABEL: Record<string, string> = {
   analyzing: 'AI 分析中',
   ready: '可预览',
   exporting: '导出中',
-  completed: '已完成',
+  completed: '已封存',
 };
 
 interface PreviewTileProps {
@@ -79,6 +82,12 @@ function PreviewTile({ projectId, index, hasPreview, template, stamp }: PreviewT
 }
 
 export default function History() {
+  usePageSeo({
+    title: '项目中心',
+    description: '管理你的 appshots.cn 项目，查看封存导出记录并下载 ZIP。',
+    path: '/history',
+  });
+
   const user = useAuthStore((s) => s.user);
   const authStatus = useAuthStore((s) => s.status);
 
@@ -328,6 +337,18 @@ export default function History() {
                 <p className="mt-1 text-xs text-slate-400">
                   更新于 {createdText} · {p.screenshotPaths?.length ?? 0} 张截图
                 </p>
+                {p.status === 'completed' && p.lastExportedAt && (
+                  <p className="mt-1 text-xs text-emerald-200/90">
+                    封存于{' '}
+                    {new Date(p.lastExportedAt).toLocaleString('zh-CN', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                )}
 
                 <div className="mt-4 grid grid-cols-3 gap-2">
                   {previewSlots.map((_, i) => {
@@ -347,8 +368,18 @@ export default function History() {
 
                 <div className="mt-5 flex items-center gap-2">
                   <Link to={`/project/${p.id}`} className="sf-btn-primary flex-1 text-center">
-                    打开项目
+                    {p.status === 'completed' ? '查看下载' : '打开项目'}
                   </Link>
+                  {p.lastExportZipUrl && (
+                    <a
+                      href={p.lastExportZipUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-100 transition hover:bg-emerald-500/20"
+                    >
+                      下载 ZIP
+                    </a>
+                  )}
                   <button
                     type="button"
                     onClick={() => void handleDelete(p.id, p.appName)}

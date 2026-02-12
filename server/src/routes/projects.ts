@@ -23,6 +23,10 @@ function getRouteParam(value: string | string[] | undefined): string {
   return value ?? '';
 }
 
+function isProjectExportLocked(status: unknown): boolean {
+  return status === 'completed';
+}
+
 // List projects
 router.get('/', requireAuth, async (req, res, next) => {
   try {
@@ -68,6 +72,8 @@ router.post('/', requireAuth, async (req, res, next) => {
       screenshotPaths: null,
       aiAnalysis: null,
       generatedCopy: null,
+      lastExportZipUrl: null,
+      lastExportedAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -102,10 +108,15 @@ router.patch('/:id', requireAuth, async (req, res, next) => {
     const sessionId = getSessionId(req);
     const projectId = getRouteParam(req.params.id);
     const scope = projectScope(projectId, sessionId, getUserId(req));
-    const [existing] = await db.select({ id: schema.projects.id }).from(schema.projects).where(scope);
+    const [existing] = await db.select({ id: schema.projects.id, status: schema.projects.status }).from(schema.projects).where(scope);
 
     if (!existing) {
       res.status(404).json({ message: 'Project not found' });
+      return;
+    }
+
+    if (isProjectExportLocked(existing.status)) {
+      res.status(403).json({ message: '项目已导出封存，不能再编辑' });
       return;
     }
 
@@ -143,7 +154,7 @@ router.delete('/:id', requireAuth, async (req, res, next) => {
     const sessionId = getSessionId(req);
     const projectId = getRouteParam(req.params.id);
     const scope = projectScope(projectId, sessionId, getUserId(req));
-    const [existing] = await db.select({ id: schema.projects.id }).from(schema.projects).where(scope);
+    const [existing] = await db.select({ id: schema.projects.id, status: schema.projects.status }).from(schema.projects).where(scope);
 
     if (!existing) {
       res.status(404).json({ message: 'Project not found' });
@@ -166,10 +177,18 @@ router.post('/:id/upload', requireAuth, (req, res, next) => {
       const sessionId = getSessionId(req);
       const projectId = getRouteParam(req.params.id);
       const scope = projectScope(projectId, sessionId, getUserId(req));
-      const [existing] = await db.select({ id: schema.projects.id }).from(schema.projects).where(scope);
+      const [existing] = await db
+        .select({ id: schema.projects.id, status: schema.projects.status })
+        .from(schema.projects)
+        .where(scope);
 
       if (!existing) {
         res.status(404).json({ message: 'Project not found' });
+        return;
+      }
+
+      if (isProjectExportLocked(existing.status)) {
+        res.status(403).json({ message: '项目已导出封存，不能再上传截图' });
         return;
       }
 
@@ -217,6 +236,13 @@ function deserializeProject(row: Record<string, unknown>) {
     screenshotPaths: safeRow.screenshotPaths ? JSON.parse(safeRow.screenshotPaths as string) : [],
     aiAnalysis: safeRow.aiAnalysis ? JSON.parse(safeRow.aiAnalysis as string) : null,
     generatedCopy: safeRow.generatedCopy ? JSON.parse(safeRow.generatedCopy as string) : null,
+    lastExportZipUrl: typeof safeRow.lastExportZipUrl === 'string' ? safeRow.lastExportZipUrl : null,
+    lastExportedAt:
+      safeRow.lastExportedAt instanceof Date
+        ? safeRow.lastExportedAt.toISOString()
+        : safeRow.lastExportedAt
+          ? String(safeRow.lastExportedAt)
+          : null,
     createdAt: safeRow.createdAt instanceof Date ? safeRow.createdAt.toISOString() : safeRow.createdAt,
     updatedAt: safeRow.updatedAt instanceof Date ? safeRow.updatedAt.toISOString() : safeRow.updatedAt,
   };

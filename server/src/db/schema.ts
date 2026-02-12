@@ -11,6 +11,8 @@ export const projects = sqliteTable('projects', {
   screenshotPaths: text('screenshot_paths'), // JSON array
   aiAnalysis: text('ai_analysis'),           // JSON
   generatedCopy: text('generated_copy'),     // JSON
+  lastExportZipUrl: text('last_export_zip_url'),
+  lastExportedAt: integer('last_exported_at', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });

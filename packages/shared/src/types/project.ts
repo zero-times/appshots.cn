@@ -11,6 +11,8 @@ export interface Project {
   generatedCopy: GeneratedCopy | null;
   aiAnalysis: AIAnalysis | null;
   status: ProjectStatus;
+  lastExportZipUrl?: string | null;
+  lastExportedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

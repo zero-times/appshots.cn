@@ -11,6 +11,7 @@ import { useAuthStore } from '../stores/authStore';
 import { DEVICE_SIZES, TEMPLATES, dedupeLanguageCodes, getLanguageLabel } from '@appshots/shared';
 import type { CompositionModeId, DeviceSizeId, GeneratedCopy, TemplateStyleId, UsageResponse } from '@appshots/shared';
 import { membershipWechatLabel } from '../constants/membership';
+import { usePageSeo } from '../utils/seo';
 
 export default function Preview() {
   const { id } = useParams<{ id: string }>();
@@ -31,6 +32,7 @@ export default function Preview() {
   const [showExport, setShowExport] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportStatus, setExportStatus] = useState('');
+  const [latestZipUrl, setLatestZipUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [usage, setUsage] = useState<UsageResponse | null>(null);
@@ -44,6 +46,13 @@ export default function Preview() {
   const syncQueuedRef = useRef(false);
   const pendingPayloadRef = useRef<Record<string, unknown>>({});
   const isUnmountedRef = useRef(false);
+
+  usePageSeo({
+    title: currentProject?.appName ? `${currentProject.appName} 预览` : '项目预览',
+    description: '预览截图构图、文案与导出设置，生成可下载的 ZIP 交付包。',
+    path: id ? `/project/${id}` : '/project',
+    noindex: !isAuthenticated,
+  });
 
   const clearExportResetTimer = useCallback(() => {
     if (exportResetTimerRef.current !== null) {
@@ -139,6 +148,7 @@ export default function Preview() {
       .then((p) => {
         if (!isActive || isUnmountedRef.current) return;
         setCurrentProject(p as never);
+        setLatestZipUrl(((p as Record<string, unknown>).lastExportZipUrl as string | null) ?? null);
         setIsLoading(false);
       })
       .catch((err) => {
@@ -152,6 +162,11 @@ export default function Preview() {
       isActive = false;
     };
   }, [authStatus, id, currentProject?.id, reloadKey, setCurrentProject]);
+
+  useEffect(() => {
+    if (!currentProject) return;
+    setLatestZipUrl(currentProject.lastExportZipUrl ?? null);
+  }, [currentProject?.id, currentProject?.lastExportZipUrl]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -266,18 +281,20 @@ export default function Preview() {
 
   const handleCopyChange = useCallback(
     (copy: GeneratedCopy) => {
+      if (currentProject?.status === 'completed' || isExporting) return;
       updateCopy(copy);
       void syncProject({ generatedCopy: copy });
     },
-    [syncProject, updateCopy],
+    [currentProject?.status, isExporting, syncProject, updateCopy],
   );
 
   const handleTemplateChange = useCallback(
     (templateId: TemplateStyleId) => {
+      if (currentProject?.status === 'completed' || isExporting) return;
       setTemplate(templateId);
       void syncProject({ templateStyle: templateId });
     },
-    [setTemplate, syncProject],
+    [currentProject?.status, isExporting, setTemplate, syncProject],
   );
 
   const waitUntilExportDone = useCallback((jobId: string): Promise<string> => {
@@ -351,6 +368,10 @@ export default function Preview() {
     includeWatermark: boolean;
   }) => {
     if (!id) return;
+    if (currentProject?.status === 'completed') {
+      alert('该项目已封存，请直接使用下载地址。');
+      return;
+    }
     if (!isAuthenticated) {
       alert('请先登录后再导出。');
       return;
@@ -380,8 +401,19 @@ export default function Preview() {
       const zipUrl = await waitUntilExportDone(job.jobId);
 
       safeExportUpdate(() => setExportProgress(100));
-      safeExportUpdate(() => setExportStatus('导出完成，正在下载...'));
-      window.open(zipUrl, '_blank');
+      safeExportUpdate(() => setExportStatus('导出完成，请点击下载按钮获取 ZIP。'));
+      safeExportUpdate(() => {
+        setLatestZipUrl(zipUrl);
+        setShowExport(true);
+      });
+      const refreshed = await api.getProject(id);
+      safeExportUpdate(() => {
+        setCurrentProject(refreshed as never);
+        const persistedZip = (refreshed as Record<string, unknown>).lastExportZipUrl;
+        if (typeof persistedZip === 'string' && persistedZip.length > 0) {
+          setLatestZipUrl(persistedZip);
+        }
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Export failed';
       safeExportUpdate(() => setExportStatus(message));
@@ -461,10 +493,11 @@ export default function Preview() {
     analyzing: 'AI 分析中',
     ready: '可预览',
     exporting: '导出中',
-    completed: '已完成',
+    completed: '已封存',
   };
   const statusLabel = statusLabelMap[currentProject.status] || currentProject.status;
-  const canExportProject = currentProject.status === 'ready' || currentProject.status === 'completed';
+  const isExportLocked = currentProject.status === 'completed';
+  const canExportProject = currentProject.status === 'ready';
   const updatedAt = currentProject.updatedAt || currentProject.createdAt;
   const updatedText = updatedAt
     ? new Date(updatedAt).toLocaleString('zh-CN', {
@@ -557,8 +590,8 @@ export default function Preview() {
     if (!completionSummary) return '等待生成文案';
     return `已完成 ${completionSummary.completed} / ${screenshotCount}`;
   })();
-  const canUseEditor = Boolean(isMember);
-  const shouldShowExport = showExport || !canUseEditor;
+  const canUseEditor = Boolean(isMember) && !isExportLocked;
+  const shouldShowExport = showExport || !canUseEditor || isExportLocked;
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 shadow-[0_20px_50px_rgba(6,7,12,0.45)] backdrop-blur">
@@ -603,6 +636,11 @@ export default function Preview() {
           >
             {isExporting ? `导出中 ${Math.round(exportProgress)}%` : showExport ? '返回编辑' : '导出素材'}
           </button>
+        ) : isExportLocked ? (
+          <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-right text-xs text-emerald-100">
+            <p>项目已完成导出并封存，编辑与参数设置已锁定。</p>
+            {latestZipUrl ? <p className="mt-1 text-emerald-50/90">可直接点击下载按钮获取 ZIP。</p> : null}
+          </div>
         ) : (
           <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-right text-xs text-amber-100">
             <p>免费版仅支持导出交付，编辑功能为会员专享。</p>
@@ -613,7 +651,17 @@ export default function Preview() {
 
       {shouldShowExport ? (
         <div className="mx-auto max-w-3xl space-y-4">
-          {!canUseEditor && (
+          {latestZipUrl && (
+            <div className="sf-card-soft rounded-2xl p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">导出结果</p>
+              <div className="mt-3">
+                <a href={latestZipUrl} target="_blank" rel="noreferrer" className="sf-btn-primary inline-flex whitespace-nowrap">
+                  下载 ZIP
+                </a>
+              </div>
+            </div>
+          )}
+          {!canUseEditor && !isExportLocked && (
             <div className="sf-card-soft rounded-2xl p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">会员功能说明</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -639,6 +687,7 @@ export default function Preview() {
             exportProgress={exportProgress}
             exportStatus={exportStatus}
             isMember={Boolean(isMember)}
+            isLocked={isExportLocked}
             screenshotCount={screenshotCount}
             canExportProject={canExportProject}
             projectStatusLabel={statusLabel}
@@ -724,12 +773,14 @@ export default function Preview() {
                 </div>
               )}
             </div>
-            <TemplatePicker
-              selected={currentProject.templateStyle}
-              recommended={currentProject.aiAnalysis?.recommendedTemplate}
-              onChange={handleTemplateChange}
-            />
-            {currentProject.generatedCopy ? (
+            {canUseEditor && (
+              <TemplatePicker
+                selected={currentProject.templateStyle}
+                recommended={currentProject.aiAnalysis?.recommendedTemplate}
+                onChange={handleTemplateChange}
+              />
+            )}
+            {canUseEditor && currentProject.generatedCopy ? (
               <div className="space-y-3">
                 <div className="sf-card-soft flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div>
@@ -757,6 +808,11 @@ export default function Preview() {
                   onIndexChange={setCurrentIndex}
                   onCopyChange={handleCopyChange}
                 />
+              </div>
+            ) : isExportLocked ? (
+              <div className="sf-card-soft space-y-2 px-4 py-3 text-sm text-slate-300">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">项目封存</p>
+                <p>导出成功后，截图和文案已自动清理，仅保留 ZIP 下载地址。</p>
               </div>
             ) : (
               <div className="sf-card-soft space-y-2 px-4 py-3 text-sm text-slate-300">

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { MembershipWechatCard } from '../components/common/MembershipWechatCard';
 import { membershipWechatLabel } from '../constants/membership';
+import { usePageSeo } from '../utils/seo';
 
 const FEATURES = [
   {
@@ -34,6 +35,12 @@ const STATS = [
 ] as const;
 
 export default function Landing() {
+  usePageSeo({
+    title: 'AI App Store 截图生成器',
+    description: 'appshots.cn 提供 AI 截图分析、模板推荐和多尺寸 ZIP 导出，帮助你快速产出应用商店上架素材。',
+    path: '/',
+  });
+
   return (
     <div className="mx-auto max-w-6xl px-4 pb-16 pt-12 sm:pt-16">
       <section className="sf-card relative overflow-hidden p-8 sm:p-12">

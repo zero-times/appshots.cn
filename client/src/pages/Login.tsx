@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import { usePageSeo } from '../utils/seo';
 
 export default function Login() {
+  usePageSeo({
+    title: '登录',
+    description: '通过邮箱验证码登录 appshots.cn，管理项目并导出截图素材。',
+    path: '/login',
+  });
+
   const navigate = useNavigate();
   const { status, error, sendCode, verifyCode, clearError } = useAuthStore();
 

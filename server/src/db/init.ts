@@ -12,6 +12,8 @@ export function initDatabase() {
     screenshot_paths TEXT,
     ai_analysis TEXT,
     generated_copy TEXT,
+    last_export_zip_url TEXT,
+    last_exported_at INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   )`);
@@ -26,6 +28,16 @@ export function initDatabase() {
   const hasOwnerUserId = columns.some((column) => column.name === 'owner_user_id');
   if (!hasOwnerUserId) {
     db.run(sql`ALTER TABLE projects ADD COLUMN owner_user_id TEXT`);
+  }
+
+  const hasLastExportZipUrl = columns.some((column) => column.name === 'last_export_zip_url');
+  if (!hasLastExportZipUrl) {
+    db.run(sql`ALTER TABLE projects ADD COLUMN last_export_zip_url TEXT`);
+  }
+
+  const hasLastExportedAt = columns.some((column) => column.name === 'last_exported_at');
+  if (!hasLastExportedAt) {
+    db.run(sql`ALTER TABLE projects ADD COLUMN last_exported_at INTEGER`);
   }
 
   // Auth tables

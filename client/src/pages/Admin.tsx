@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { useAuthStore } from '../stores/authStore';
 import { MembershipWechatCard } from '../components/common/MembershipWechatCard';
 import { membershipWechatLabel } from '../constants/membership';
+import { usePageSeo } from '../utils/seo';
 
 interface AdminProject {
   id: string;
@@ -61,6 +62,13 @@ function formatTime(value?: string | null): string {
 }
 
 export default function Admin() {
+  usePageSeo({
+    title: '管理后台',
+    description: '管理用户角色、会员状态与项目数据。',
+    path: '/admin',
+    noindex: true,
+  });
+
   const authStatus = useAuthStore((s) => s.status);
   const currentUser = useAuthStore((s) => s.user);
   const isAdmin = currentUser?.role === 'admin';

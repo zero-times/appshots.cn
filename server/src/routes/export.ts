@@ -114,6 +114,41 @@ function markAdvancedExportRequested(projectId: string, sessionId: string, userI
   advancedExportLastRequestAt.set(key, Date.now());
 }
 
+async function removeProjectScreenshots(screenshotPaths: string[]): Promise<void> {
+  await Promise.all(
+    screenshotPaths.map(async (filename) => {
+      const filepath = path.join(uploadsDir, filename);
+      try {
+        await fs.promises.unlink(filepath);
+      } catch (error) {
+        const nodeError = error as NodeJS.ErrnoException;
+        if (nodeError.code !== 'ENOENT') {
+          throw error;
+        }
+      }
+    }),
+  );
+}
+
+async function finalizeProjectAfterExport(project: ExportProject, zipUrl: string): Promise<void> {
+  const screenshotPaths = safeParseJson<string[]>(project.screenshotPaths, []);
+  await removeProjectScreenshots(screenshotPaths);
+
+  await db
+    .update(schema.projects)
+    .set({
+      status: 'completed',
+      screenshotPaths: null,
+      aiAnalysis: null,
+      generatedCopy: null,
+      appDescription: null,
+      lastExportZipUrl: zipUrl,
+      lastExportedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.projects.id, project.id));
+}
+
 function buildExportPayload(project: ExportProject, body: ExportRequest): {
   screenshots: Buffer[];
   copy: GeneratedCopy;
@@ -224,14 +259,22 @@ async function runExportJob(jobId: string, projectId: string, body: ExportReques
     const filename = buildExportFilename(project.appName, suffix);
     const filepath = path.join(exportsDir, filename);
     fs.writeFileSync(filepath, zipBuffer);
+    const zipUrl = `/api/export/${filename}`;
+
+    await finalizeProjectAfterExport(project, zipUrl);
 
     completeExportJob(jobId, {
-      zipUrl: `/api/export/${filename}`,
+      zipUrl,
       fileCount: payload.fileCount,
       totalSizeBytes: zipBuffer.length,
       message: `导出完成，共 ${payload.fileCount} 张图片。`,
     });
   } catch (error) {
+    await db
+      .update(schema.projects)
+      .set({ status: 'ready', updatedAt: new Date() })
+      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.status, 'exporting')));
+
     const message = error instanceof Error ? error.message : 'Export failed';
     failExportJob(jobId, message);
   }
@@ -329,6 +372,16 @@ router.post('/projects/:id/export/jobs', requireAuth, async (req, res, next) => 
       return;
     }
 
+    if (project.status === 'completed') {
+      res.status(409).json({ message: '项目已导出封存，请使用现有下载地址获取 ZIP' });
+      return;
+    }
+
+    if (project.status === 'exporting') {
+      res.status(409).json({ message: '当前项目正在导出中，请稍候' });
+      return;
+    }
+
     const body = req.body as ExportRequest;
 
     // Free user constraints: force watermark, restrict to basic zh/en
@@ -365,9 +418,19 @@ router.post('/projects/:id/export/jobs', requireAuth, async (req, res, next) => 
       return;
     }
 
+    if (project.status !== 'ready') {
+      res.status(400).json({ message: '项目尚未准备好导出，请先完成分析' });
+      return;
+    }
+
     if (body.includeWatermark === false) {
       markAdvancedExportRequested(projectId, sessionId, userId);
     }
+
+    await db
+      .update(schema.projects)
+      .set({ status: 'exporting', updatedAt: new Date() })
+      .where(eq(schema.projects.id, projectId));
 
     const job = createExportJob(projectId, sessionId);
     void runExportJob(job.jobId, projectId, body);
@@ -456,6 +519,16 @@ router.post('/projects/:id/export', requireAuth, async (req, res, next) => {
       return;
     }
 
+    if (project.status === 'completed') {
+      res.status(409).json({ message: '项目已导出封存，请使用现有下载地址获取 ZIP' });
+      return;
+    }
+
+    if (project.status === 'exporting') {
+      res.status(409).json({ message: '当前项目正在导出中，请稍候' });
+      return;
+    }
+
     const body = req.body as ExportRequest;
 
     // Free user constraints: force watermark, restrict to basic zh/en
@@ -481,6 +554,16 @@ router.post('/projects/:id/export', requireAuth, async (req, res, next) => {
       markAdvancedExportRequested(projectId, sessionId, userId);
     }
 
+    if (project.status !== 'ready') {
+      res.status(400).json({ message: '项目尚未准备好导出，请先完成分析' });
+      return;
+    }
+
+    await db
+      .update(schema.projects)
+      .set({ status: 'exporting', updatedAt: new Date() })
+      .where(eq(schema.projects.id, projectId));
+
     const payload = buildExportPayload(project, body);
 
     const zipBuffer = await generateExportZip({
@@ -501,13 +584,22 @@ router.post('/projects/:id/export', requireAuth, async (req, res, next) => {
     const filename = buildExportFilename(project.appName, `${Date.now()}`);
     const filepath = path.join(exportsDir, filename);
     fs.writeFileSync(filepath, zipBuffer);
+    const zipUrl = `/api/export/${filename}`;
+
+    await finalizeProjectAfterExport(project, zipUrl);
 
     res.json({
-      zipUrl: `/api/export/${filename}`,
+      zipUrl,
       fileCount: payload.fileCount,
       totalSizeBytes: zipBuffer.length,
     });
   } catch (err) {
+    const projectId = getRouteParam(req.params.id);
+    await db
+      .update(schema.projects)
+      .set({ status: 'ready', updatedAt: new Date() })
+      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.status, 'exporting')));
+
     next(err);
   }
 });

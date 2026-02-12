@@ -11,8 +11,15 @@ import { ProcessingStatus } from '../components/wizard/ProcessingStatus';
 import { MembershipWechatCard } from '../components/common/MembershipWechatCard';
 import { useAuthStore } from '../stores/authStore';
 import { membershipWechatLabel } from '../constants/membership';
+import { usePageSeo } from '../utils/seo';
 
 export default function Creator() {
+  usePageSeo({
+    title: '创建项目',
+    description: '上传 3-5 张截图并开始 AI 分析，生成中英文案与推荐模板，快速进入导出交付。',
+    path: '/create',
+  });
+
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const membership = useAuthStore((s) => s.membership);

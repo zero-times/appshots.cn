@@ -78,6 +78,11 @@ router.post('/:id/analyze', requireAuth, async (req, res, next) => {
       return;
     }
 
+    if (project.status === 'completed') {
+      res.status(403).json({ message: '项目已导出封存，不能重新分析' });
+      return;
+    }
+
     const screenshotPaths: string[] = project.screenshotPaths ? JSON.parse(project.screenshotPaths) : [];
     if (screenshotPaths.length < 3) {
       res.status(400).json({ message: 'Upload at least 3 screenshots first' });
