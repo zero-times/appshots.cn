@@ -308,7 +308,7 @@ router.get('/projects/:id/preview/:index', requireAuth, async (req, res, next) =
     });
 
     res.set('Content-Type', 'image/png');
-    res.set('Cache-Control', 'public, max-age=300');
+    res.set('Cache-Control', 'no-store, max-age=0');
     res.send(composed);
   } catch (err) {
     next(err);
