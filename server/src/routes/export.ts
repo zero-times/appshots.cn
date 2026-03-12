@@ -76,13 +76,32 @@ function isDeviceSizeId(id: string): id is DeviceSizeId {
   return id in DEVICE_SIZES;
 }
 
+function normalizeDeviceSizeId(rawId: string | undefined): DeviceSizeId | undefined {
+  if (!rawId) return undefined;
+  if (isDeviceSizeId(rawId)) return rawId;
+
+  const legacyMap: Record<string, DeviceSizeId> = {
+    '6.7': '6.5',
+    '6.1': '6.5',
+    '5.5': '6.5',
+    '11.0': '13.0',
+    '12.9': '13.0',
+  };
+
+  return legacyMap[rawId];
+}
+
 function isTemplateStyleId(id: string): id is TemplateStyleId {
   return id in TEMPLATES;
 }
 
 function toDeviceSizes(deviceIds: DeviceSizeId[] | undefined): Array<(typeof DEVICE_SIZES)[DeviceSizeId]> {
   const ids = (deviceIds && deviceIds.length > 0 ? deviceIds : ['6.5']) as string[];
-  return ids.filter(isDeviceSizeId).map((id) => DEVICE_SIZES[id]);
+  const normalized = ids
+    .map((id) => normalizeDeviceSizeId(id))
+    .filter((id): id is DeviceSizeId => Boolean(id));
+
+  return Array.from(new Set(normalized)).map((id) => DEVICE_SIZES[id]);
 }
 
 function resolveTemplate(templateId: string | null | undefined): (typeof TEMPLATES)[TemplateStyleId] {
@@ -323,10 +342,10 @@ router.get('/projects/:id/preview/:index', requireAuth, async (req, res, next) =
 
     const templateId = (req.query.template as string) || project.templateStyle || 'clean';
     const lang = normalizeLanguageCode((req.query.lang as string) || 'zh');
-    const deviceId = (req.query.device as string) || '6.5';
+    const deviceId = normalizeDeviceSizeId(req.query.device as string) || '6.5';
 
     const template = resolveTemplate(templateId);
-    const deviceSize = DEVICE_SIZES[deviceId as DeviceSizeId];
+    const deviceSize = DEVICE_SIZES[deviceId];
     if (!deviceSize) {
       res.status(400).json({ message: 'Invalid device size' });
       return;
