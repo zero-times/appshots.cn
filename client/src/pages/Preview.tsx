@@ -26,7 +26,7 @@ export default function Preview() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [lang, setLang] = useState<string>('zh');
   const [showHints, setShowHints] = useState(true);
-  const [device, setDevice] = useState<DeviceSizeId>('6.7');
+  const [device, setDevice] = useState<DeviceSizeId>('6.5');
   const [refreshKey, setRefreshKey] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
   const [showExport, setShowExport] = useState(false);

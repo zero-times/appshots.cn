@@ -31,7 +31,7 @@ const STEPS = [
 const STATS = [
   { label: '生成时间', value: '10-20 秒', tone: 'text-emerald-100 bg-emerald-500/15 ring-emerald-300/40' },
   { label: '模板风格', value: '14+', tone: 'text-primary-100 bg-primary-500/15 ring-primary-300/40' },
-  { label: '支持尺寸', value: 'iPhone / iPad / Google Play', tone: 'text-slate-100 bg-white/10 ring-white/15' },
+  { label: '支持尺寸', value: 'iPhone 6.5" / iPad 13" / Google Play', tone: 'text-slate-100 bg-white/10 ring-white/15' },
 ] as const;
 
 export default function Landing() {
@@ -103,7 +103,7 @@ export default function Landing() {
                 <div className="aspect-[9/16] rounded-[22px] border border-white/10 bg-gradient-to-br from-[#0F172A] via-[#111827] to-[#020617] p-4">
                   <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.24em] text-slate-400">
                     <span>Preview</span>
-                    <span>6.7"</span>
+                    <span>6.5"</span>
                   </div>
                   <div className="mt-4 space-y-3">
                     <div className="rounded-xl bg-white/10 p-3 text-xs text-slate-200">

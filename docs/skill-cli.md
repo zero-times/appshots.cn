@@ -11,7 +11,7 @@ pnpm skill:export -- \
   --images-dir ./input-screenshots \
   --copy ./examples/skill-copy.example.json \
   --template clean \
-  --sizes "6.7,android-phone" \
+  --sizes "6.5,android-phone" \
   --languages "zh,en,pt" \
   --out-dir ./exports \
   --app-name DemoApp \
@@ -51,7 +51,7 @@ The CLI also accepts `items[]` shape and will normalize it.
 
 ## Supported size ids
 
-- iOS: `6.7`, `6.1`, `5.5`, `11.0`, `12.9`
+- iOS: `6.5`, `13.0`
 - Google Play: `android-phone`, `android-7`, `android-10`
 
 ## Supported template ids

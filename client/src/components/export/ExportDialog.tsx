@@ -32,7 +32,7 @@ export function ExportDialog({
   projectStatusLabel,
   availableLanguages,
 }: ExportDialogProps) {
-  const [deviceSizes, setDeviceSizes] = useState<DeviceSizeId[]>(['6.7']);
+  const [deviceSizes, setDeviceSizes] = useState<DeviceSizeId[]>(['6.5']);
   const languageOptions = useMemo(() => dedupeLanguageCodes(availableLanguages, ['zh', 'en']), [availableLanguages]);
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>(() => [...languageOptions]);
   const controlsLocked = isExporting || isLocked;

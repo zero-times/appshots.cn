@@ -1,9 +1,6 @@
 export type DeviceSizeId =
-  | '6.7'
-  | '6.1'
-  | '5.5'
-  | '11.0'
-  | '12.9'
+  | '6.5'
+  | '13.0'
   | 'android-phone'
   | 'android-7'
   | 'android-10';

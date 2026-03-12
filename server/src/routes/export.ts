@@ -81,7 +81,7 @@ function isTemplateStyleId(id: string): id is TemplateStyleId {
 }
 
 function toDeviceSizes(deviceIds: DeviceSizeId[] | undefined): Array<(typeof DEVICE_SIZES)[DeviceSizeId]> {
-  const ids = (deviceIds && deviceIds.length > 0 ? deviceIds : ['6.7']) as string[];
+  const ids = (deviceIds && deviceIds.length > 0 ? deviceIds : ['6.5']) as string[];
   return ids.filter(isDeviceSizeId).map((id) => DEVICE_SIZES[id]);
 }
 
@@ -323,7 +323,7 @@ router.get('/projects/:id/preview/:index', requireAuth, async (req, res, next) =
 
     const templateId = (req.query.template as string) || project.templateStyle || 'clean';
     const lang = normalizeLanguageCode((req.query.lang as string) || 'zh');
-    const deviceId = (req.query.device as string) || '6.7';
+    const deviceId = (req.query.device as string) || '6.5';
 
     const template = resolveTemplate(templateId);
     const deviceSize = DEVICE_SIZES[deviceId as DeviceSizeId];

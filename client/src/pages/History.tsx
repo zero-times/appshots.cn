@@ -37,7 +37,7 @@ function PreviewTile({ projectId, index, hasPreview, template, stamp }: PreviewT
   const [hasError, setHasError] = useState(false);
 
   const previewUrl = hasPreview
-    ? `${api.getPreviewUrl(projectId, index, template, 'zh', '6.7')}&t=${stamp}-${retryKey}`
+    ? `${api.getPreviewUrl(projectId, index, template, 'zh', '6.5')}&t=${stamp}-${retryKey}`
     : '';
 
   useEffect(() => {
